@@ -396,6 +396,15 @@ struct ContentView: View {
 }
 @main struct MarsPadApp: App {
     init() {
+        if let index = CommandLine.arguments.firstIndex(of: "--roundtrip-native"), CommandLine.arguments.count == index + 3 {
+            do {
+                let template = try NativeTemplate.read(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+                let raw = template.header + (try template.layout.encode(template.root))
+                try raw.write(to: URL(fileURLWithPath: CommandLine.arguments[index + 2]))
+                print("Native serialization round-trip written locally.")
+                exit(0)
+            } catch { fputs("Round-trip failed: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--export-mpc"), CommandLine.arguments.count == index + 4 {
             do {
                 let kit = try JSONDecoder().decode(Kit.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[index + 1])))

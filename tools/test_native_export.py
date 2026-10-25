@@ -4,6 +4,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import re
 from pathlib import Path
 import struct
 import subprocess
@@ -24,6 +25,17 @@ def main():
         root = Path(temp)
         source = root / 'sounds'; source.mkdir()
         output = root / 'out'; output.mkdir()
+        # A no-change archive must preserve serialization order and scalar tokens.
+        # Ordinary JSON equality would miss the sorted-key rewrite in older builds.
+        roundtrip = root / 'roundtrip-native.txt'
+        result = subprocess.run([str(binary), '--roundtrip-native', str(template), str(roundtrip)], capture_output=True, text=True, timeout=60)
+        assert result.returncode == 0, result.stderr
+        with zipfile.ZipFile(template) as archive:
+            member = next(n for n in archive.namelist() if n.endswith('.xpj'))
+            native = gzip.decompress(archive.read(member))
+        def tokens(raw):
+            return re.findall(rb'"(?:\\.|[^"\\])*"|[^\s"{},:\[\]]+|[{},:\[\]]', raw)
+        assert tokens(native) == tokens(roundtrip.read_bytes()), 'Native field order/scalar spellings changed'
         pads = []
         for i in range(128):
             path = source / f'sound-{i:03d}.wav'
@@ -159,7 +171,7 @@ def main():
         export(values, ok=False)
         assert hashlib.sha256(template.read_bytes()).digest() == original_hash
         assert all(hashlib.sha256(p.read_bytes()).digest() == digest for p, digest in source_hashes.items())
-        print('PASS: kit-based project names; non-overwriting numbered exports; SD placement notes; original/Unicode/duplicate/long sample names; safe filenames; 128-pad / 8-bank exports; sparse banks; archive and raw templates; 24-bit PCM payload/rate/channel/frame accuracy; no stale samples/events; independent reference inspection; failures clean up; originals unchanged')
+        print('PASS: token-identical native round-trip; kit-based project names; non-overwriting numbered exports; SD placement notes; original/Unicode/duplicate/long sample names; safe filenames; 128-pad / 8-bank exports; sparse banks; archive and raw templates; 24-bit PCM payload/rate/channel/frame accuracy; no stale samples/events; independent reference inspection; failures clean up; originals unchanged')
 
 
 if __name__ == '__main__':

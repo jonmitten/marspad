@@ -12,6 +12,7 @@ struct ExportFailure: LocalizedError {
 struct NativeTemplate {
     let header: Data
     let root: [String: Any]
+    let layout: NativeJSON
     let trackIndex: Int
     let emptyInstrument: [String: Any]
 
@@ -79,7 +80,7 @@ struct NativeTemplate {
               let sequences = data["sequences"] as? [[String: Any]], !sequences.isEmpty else {
             throw ExportFailure("Template must contain one 128-pad drum track, eight layers per pad, an empty pad, and a sequence.")
         }
-        return NativeTemplate(header: Data(raw[..<marker]), root: root, trackIndex: index, emptyInstrument: empty)
+        return NativeTemplate(header: Data(raw[..<marker]), root: root, layout: try NativeJSON.parse(Data(raw[marker...])), trackIndex: index, emptyInstrument: empty)
     }
 }
 
@@ -237,7 +238,7 @@ enum NativeExport {
             data["info"] = info
         }
         let project = destination.appendingPathComponent(base + ".xpj")
-        let raw = template.header + (try JSONSerialization.data(withJSONObject: ["data": data], options: [.sortedKeys]))
+        let raw = template.header + (try template.layout.encode(["data": data]))
         let temporary = destination.appendingPathComponent(".project-raw")
         try raw.write(to: temporary)
         let compressed = try NativeTemplate.command("/usr/bin/gzip", ["-nc", temporary.path])

@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.2.3 prototype
+## Current release: 0.2.4 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -17,8 +17,10 @@ MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
 - Export a native `.xpj` plus companion audio directory using a device-saved template.
 
-Native export has passed structural and audio checks. **Hardware validation is
-pending**: verify a separate small project on your device before relying on it.
+Native export is experimental. **A previous generated project failed to load on
+the hardware.** Version 0.2.4 preserves native serialization order and scalar
+formatting, but the cause is not confirmed and a successful hardware load/save
+round trip remains required. Structural/audio checks alone do not prove compatibility.
 Audio-only export remains available for manual assignment. The app writes new
 folders, never firmware or device system files.
 

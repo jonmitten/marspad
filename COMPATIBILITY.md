@@ -13,7 +13,7 @@ Observed in one user-supplied device project (not a general schema guarantee):
 - All 35 WAV files referenced by that project were found in its companion folder.
 - There are 35 occupied instrument layers in the first drum track.
 
-## Exporter behavior (0.2.3)
+## Exporter behavior (0.2.4)
 
 Native export reads a caller-supplied reference at runtime; it does not bundle
 or distribute the user's project. Templates with unknown versions, multiple drum
@@ -38,6 +38,24 @@ tracks, or no empty-pad prototype are rejected. The template is never modified.
   Generated notes place the XPJ and companion directory directly under
   `MPC-Sample/Projects`, matching eight inspected device-saved projects.
   Failed output is removed.
+
+## Observed load failure and serialization correction
+
+A kit-named three-sample export was reported as "Error loading project" on the
+MPC Sample. Read-only checks confirmed the card's XPJ and all audio files matched
+the local export byte-for-byte and were placed beside each other under
+`MPC-Sample/Projects`. This rules out an incomplete transfer for that attempt.
+
+Earlier output used sorted JSON keys and rewrote integral floating-point tokens
+(e.g. `1.0` to `1`). Version 0.2.4 keeps native object field order and unchanged
+scalar token spellings through a template-aware writer. A no-change round trip
+preserves all 608,123 tokens in the supplied reference (ignoring whitespace).
+This is a compatibility hypothesis, not a proven explanation of the device error.
+The [cereal archive documentation](https://uscilab.github.io/cereal/serialization_archives.html)
+describes named and unnamed serialization; we do not have the MPC loader source.
+
+No files were written to the card during diagnosis. No replacement export has
+yet been confirmed to load on hardware.
 
 ## Validation evidence
 
