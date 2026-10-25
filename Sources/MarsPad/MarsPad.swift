@@ -59,6 +59,10 @@ func scanFiles(_ root: URL) -> [Sample] {
     @Published var scanning = false
     @Published var dirty = false
     @Published var playing: String?
+    @Published var sampleDetails = "Select a sample to see its audio details."
+    @Published var detailName: String?
+    private var detailTask: Task<Void, Never>?
+    private var previewID = UUID()
     // AVPlayer opens and buffers media asynchronously instead of decoding the
     // whole sample on the interface thread. Reuse one player for every selection.
     private let player: AVPlayer = {
@@ -95,6 +99,19 @@ func scanFiles(_ root: URL) -> [Sample] {
     func preview(_ sample: Sample?) {
         stopPreview()
         guard let sample else { return }
+        let requestID = previewID
+        detailName = sample.name
+        sampleDetails = "Reading audio details…"
+        detailTask = Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try SampleDetails.read(URL(fileURLWithPath: sample.path)) }
+            }.value
+            guard !Task.isCancelled, let self, self.previewID == requestID else { return }
+            switch result {
+            case .success(let details): self.sampleDetails = details.summary
+            case .failure: self.sampleDetails = "Audio details unavailable for this file."
+            }
+        }
         let item = AVPlayerItem(url: URL(fileURLWithPath: sample.path))
         previewObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
             Task { @MainActor [weak self, weak item] in
@@ -113,6 +130,11 @@ func scanFiles(_ root: URL) -> [Sample] {
     func stopPreview() {
         // Detach the old item before creating its replacement; stale loads and
         // callbacks cannot restart it or overwrite the latest selection's status.
+        previewID = UUID()
+        detailTask?.cancel()
+        detailTask = nil
+        detailName = nil
+        sampleDetails = "Select a sample to see its audio details."
         previewObservation = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
@@ -244,6 +266,10 @@ struct ContentView: View {
                             .contextMenu { Button("Preview") { model.preview(s) }; Button("Assign to selected pad") { model.assign(s) }; Button("Show in Finder") { NSWorkspace.shared.selectFile(s.path, inFileViewerRootedAtPath: "") } }
                         }
                     }.listStyle(.inset).onChange(of: model.selected) { _ in model.preview(model.current) }
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(model.detailName ?? "SAMPLE DETAILS").font(.caption.bold()).lineLimit(1)
+                        Text(model.sampleDetails).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 4)
                 }.padding(18).frame(minWidth: 300, idealWidth: 370)
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -295,7 +321,7 @@ struct ContentView: View {
                 }.padding(22).frame(minWidth: 570)
             }
             Divider()
-            HStack { if model.scanning { ProgressView().controlSize(.small) }; Text(model.status).font(.caption).lineLimit(2); Spacer(); Button("Stop Preview", action: model.stopPreview) }.padding(12)
+            HStack { if model.scanning { ProgressView().controlSize(.small) }; Text(model.status).font(.caption).lineLimit(2); Spacer(); Text(BuildInfo.footer).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled); Button("Stop Preview", action: model.stopPreview) }.padding(12)
         }.frame(minWidth: 1000, minHeight: 800).preferredColorScheme(.dark)
         .onAppear {
             NSApplication.shared.setActivationPolicy(.regular)
@@ -325,6 +351,11 @@ struct ContentView: View {
                 let shortFile = try AVAudioFile(forWriting: short, settings: format.settings)
                 try shortFile.write(from: buffer)
             } catch { fatalError("Fixture creation failed: \(error)") }
+            let details = try! SampleDetails.read(long)
+            precondition(abs(details.duration! - 180) < 0.01)
+            precondition(details.bitDepth == 32 && details.bitRate == 1411200)
+            precondition(details.channels == 1 && details.sampleRate == 44100)
+            print("PASS: header metadata for generated 180-second, 32-bit, 44.1 kHz mono WAV (1411.2 kb/s)")
             let start = Date()
             for n in 0..<20 {
                 model.preview(Sample(path: (n.isMultiple(of: 2) ? long : short).path, collection: "Test", category: "Other"))

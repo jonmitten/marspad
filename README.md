@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.1.3 prototype
+## Current release: 0.1.4 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -26,7 +26,7 @@ Requires macOS 13+ and Apple Command Line Tools / Xcode with Swift 5.9+.
 
 ```sh
 ./build-app.sh
-open dist/MarsPad.app
+open "dist/MarsPad $(cat VERSION).app"
 ```
 
 The build is locally ad-hoc signed; public distribution would require release
@@ -61,3 +61,17 @@ Commit code and documentation only. Do not commit commercial audio, personal
 MPC projects, exported kits, local library indexes or absolute personal paths.
 No audio or supplied project is bundled with this repository. MIT applies to this
 application's code; it does not relicense any imported sample content.
+
+## Audio details and build identity
+
+Select a library sound or populated pad to see duration, bit rate, PCM bit depth,
+sample rate and channel count beneath the library. Header reads happen in the
+background; stale selections cannot overwrite the current details. Compressed
+durations are marked approximate, and unavailable properties are labeled. Bit
+rate is audio data per second (kb/s); bit depth is shown separately for PCM.
+
+The footer shows the version from VERSION and the Git commit embedded when
+packaged. Builds from modified source have a `-dirty` suffix. Direct `swift run`
+launches show development/unpackaged rather than claiming a release identity.
+An existing binary can be packaged with `./build-app.sh /absolute/path/to/MarsPad`;
+use a binary built from the current checkout so the embedded identity is accurate.
