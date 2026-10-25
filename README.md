@@ -61,6 +61,24 @@ sample list is on the left; the selected bank's 16 pads are on the right.*
 **Kick** sounds from **Dr Bohm From Mars**. These filters also determine which
 sounds **Auto-fill Empty Pads** can choose.*
 
+## Note to self: screenshots to capture someday
+
+Documentation reminders for a future session. Use one consistently named demo
+kit throughout; these captures are optional follow-up work.
+
+- [ ] **Preview and details:** select a sample with duration, bit rate, and Show in Finder visible.
+- [ ] **Manual assignment:** show a named sound assigned to A01.
+- [ ] **Auto-fill:** show a populated bank with the active filters visible.
+- [ ] **Bank switching:** capture the same kit in banks A and B with different assignments.
+- [ ] **Clear Bank:** capture before and after clearing one bank.
+- [ ] **Save/Open Kit:** show saving a `.marspad` file and reopening it with assignments restored.
+- [ ] **Export template selection:** show selecting a project saved by the MPC Sample.
+- [ ] **Exported files:** show the kit-named `.xpj` beside its matching audio folder.
+- [ ] **SD placement:** show both items directly inside `MPC-Sample/Projects`.
+- [ ] **Hardware result:** photograph the matching assignments on the MPC Sample.
+
+See the [screenshot capture checklist](docs/SCREENSHOT-CHECKLIST.md) for more detail.
+
 ## Export to MPC Sample
 
 1. Save your kit plan, then choose **Export MPC…**.
