@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.2.2 prototype
+## Current release: 0.2.3 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -29,11 +29,15 @@ folders, never firmware or device system files.
    containing one. A template with at least one empty pad is required. This
    release accepts only AC50 / engine Sample / schema 28 / preamble 1.3.0.12.
    The supplied template stays unchanged and is not bundled in the source code.
-3. Choose a local destination. The app writes a fresh `MarsPad-<id>` folder with
-   `MarsPad-<id>.xpj`, `MarsPad-<id>_[ProjectData]/`, an assignment report, and notes.
-4. Copy that whole folder to a separate location on your microSD card. Keep the
-   `.xpj` beside its matching audio folder. Safely eject the card before leaving
-   SD Card Access mode.
+3. Choose a local destination. For a kit named `My Kit`, the app writes a fresh
+   `My Kit` folder with `My Kit.xpj`, `My Kit_[ProjectData]/`, a report, and notes.
+   Existing exports remain intact: repeated exports use `My Kit-2`, `My Kit-3`,
+   and so on. Unsupported filename characters are replaced and long names limited.
+4. Copy the `.xpj` and its matching `_[ProjectData]` folder directly into
+   `MPC-Sample/Projects` on your microSD card, matching device-created projects.
+   Do not copy the outer export folder. Leave `MPC-Sample/Samples` unchanged.
+   Keep reports locally, and avoid replacing existing device projects. Safely
+   eject the card before leaving SD Card Access mode.
 5. Save your current MPC project, load the exported `.xpj` via the Project menu,
    and verify bank boundaries, full sample playback, and empty pads. This is the
    remaining hardware validation step; software checks cannot establish it.

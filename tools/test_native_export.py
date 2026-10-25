@@ -36,9 +36,9 @@ def main():
             pads.append({'path': str(path), 'collection': 'Synthetic', 'category': 'Other'})
         source_hashes = {p: hashlib.sha256(p.read_bytes()).digest() for p in source.iterdir()}
 
-        def export(values, reference=template, ok=True):
+        def export(values, reference=template, ok=True, kit_name='Integration Test'):
             plan = root / 'test.marspad'
-            plan.write_text(json.dumps({'version': 1, 'name': 'Integration Test', 'pads': values}))
+            plan.write_text(json.dumps({'version': 1, 'name': kit_name, 'pads': values}))
             before = set(output.iterdir())
             result = subprocess.run([str(binary), '--export-mpc', str(plan), str(reference), str(output)], capture_output=True, text=True, timeout=60)
             if not ok:
@@ -48,6 +48,13 @@ def main():
             assert result.returncode == 0, result.stderr
             folder = Path(result.stdout.strip())
             project = next(folder.glob('*.xpj'))
+            assert project.stem == folder.name
+            assert '/' not in project.name and ':' not in project.name and '?' not in project.name
+            if kit_name == 'Integration Test':
+                assert project.stem == 'Integration Test' or project.stem.startswith('Integration Test-')
+            notes = (folder / 'READ ME.txt').read_text()
+            assert 'MPC-Sample/Projects' in notes and project.name in notes
+            assert 'Do not copy this outer export folder' in notes
             raw = gzip.decompress(project.read_bytes())
             assert raw.startswith(b'ACVS\n1.3.0.12\nSerialisableProjectData\njson\nLinux\n')
             data = json.loads(raw[raw.index(b'{'):])['data']
@@ -113,7 +120,9 @@ def main():
             assert len(report['assignments']) == expected
             return project
 
-        export(pads)
+        first_project = export(pads)
+        assert first_project.name == 'Integration Test.xpj'
+        first_project_hash = hashlib.sha256(first_project.read_bytes()).digest()
         # Same basenames from different folders must retain distinct identities.
         import shutil
         collisions = [None] * 128
@@ -122,7 +131,11 @@ def main():
             path = folder / (basename + '.wav')
             shutil.copyfile(pads[i]['path'], path)
             collisions[i] = dict(pads[i], path=str(path))
-        export(collisions)
+        second_project = export(collisions)
+        assert second_project.name == 'Integration Test-2.xpj'
+        assert hashlib.sha256(first_project.read_bytes()).digest() == first_project_hash
+        export(collisions, kit_name=' ../Unsafe: Kit? ')
+        export(collisions, kit_name='')
         sparse = [None] * 128
         for i in [0, 15, 16, 63, 127]: sparse[i] = pads[i]
         export(sparse)
@@ -146,7 +159,7 @@ def main():
         export(values, ok=False)
         assert hashlib.sha256(template.read_bytes()).digest() == original_hash
         assert all(hashlib.sha256(p.read_bytes()).digest() == digest for p, digest in source_hashes.items())
-        print('PASS: original/Unicode/duplicate/long sample names; safe filenames; 128-pad / 8-bank exports; sparse banks; archive and raw templates; 24-bit PCM payload/rate/channel/frame accuracy; no stale samples/events; independent reference inspection; failures clean up; originals unchanged')
+        print('PASS: kit-based project names; non-overwriting numbered exports; SD placement notes; original/Unicode/duplicate/long sample names; safe filenames; 128-pad / 8-bank exports; sparse banks; archive and raw templates; 24-bit PCM payload/rate/channel/frame accuracy; no stale samples/events; independent reference inspection; failures clean up; originals unchanged')
 
 
 if __name__ == '__main__':

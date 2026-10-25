@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import AudioToolbox
+import Darwin
 
 struct ExportFailure: LocalizedError {
     let message: String
@@ -109,6 +110,25 @@ enum NativeExport {
         return pad + "_" + (stem.isEmpty ? "Sample" : stem) + ".wav"
     }
 
+    static func createExportDirectory(kitName: String, parent: URL) throws -> (String, URL) {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-().#[]")
+        let sanitized = kitName.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
+        let stem = String(sanitized.prefix(80)).trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
+        let name = stem.isEmpty ? "Untitled Kit" : stem
+        var number = 1
+        while true {
+            let base = number == 1 ? name : name + "-" + String(number)
+            let destination = parent.appendingPathComponent(base, isDirectory: true)
+            // mkdir reserves a fresh name atomically; Foundation's directory
+            // creation may succeed for an existing folder, which we must not reuse.
+            let result = destination.path.withCString { Darwin.mkdir($0, mode_t(0o755)) }
+            if result == 0 { return (base, destination) }
+            let code = errno
+            if code == EEXIST { number += 1 }
+            else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(code)) }
+        }
+    }
+
     static func sampleNames(_ pads: [Sample?]) -> [Int: String] {
         func key(_ name: String) -> String { name.precomposedStringWithCanonicalMapping.lowercased() }
         let counts = Dictionary(grouping: pads.compactMap { $0 }, by: { key($0.name) }).mapValues { $0.count }
@@ -169,9 +189,7 @@ enum NativeExport {
         let blank = cleaned(template.emptyInstrument) as! [String: Any]
         var instruments = Array(repeating: blank, count: 128)
         var sampleEntries: [[String: Any]] = []
-        let base = "MarsPad-" + UUID().uuidString.prefix(8)
-        let destination = parent.appendingPathComponent(base)
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        let (base, destination) = try createExportDirectory(kitName: kit.name, parent: parent)
         var succeeded = false
         defer { if !succeeded { try? FileManager.default.removeItem(at: destination) } }
         let audioFolder = destination.appendingPathComponent(base + "_[ProjectData]")
@@ -229,12 +247,12 @@ enum NativeExport {
         let reopened = try NativeTemplate.read(project, requireEmptyPad: false)
         try validate(reopened.root, folder: audioFolder, expected: map)
         let report: [String: Any] = ["kit": kit.name, "format": "MPC Sample AC50", "status": "structural checks passed; hardware validation pending",
-                                    "template": templateURL.lastPathComponent, "assignments": map]
+                                    "template": templateURL.lastPathComponent, "projectFile": base + ".xpj", "assignments": map]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: destination.appendingPathComponent("Export Report.json"))
         try """
         MPC Sample project export — hardware validation pending.
-        Copy this entire folder to a separate location on your microSD card, keeping the .xpj and matching _[ProjectData] folder together. Safely eject before leaving SD Card Access mode.
+        Copy \(base).xpj and the matching \(base)_[ProjectData] folder directly into MPC-Sample/Projects on your microSD card, matching the device-created layout. Do not copy this outer export folder. Keep reports and these notes on your computer. Do not replace existing projects; use a different project name if the card already has one with this name. Safely eject before leaving SD Card Access mode.
         Save your current device project before testing. Load this .xpj through the Project menu. Verify A01, A16, B01 and H16 (where assigned), full sample playback, empty pads, and bank order before relying on the export. Do not overwrite your original projects.
         Audio is exported as 24-bit PCM WAV at its original supported sample rate. Source files and template are unchanged. Existing template sequence events, song items and effects are cleared. Routing and other schema defaults are retained.
         """.write(to: destination.appendingPathComponent("READ ME.txt"), atomically: true, encoding: .utf8)

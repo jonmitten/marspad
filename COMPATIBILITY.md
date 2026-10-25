@@ -13,7 +13,7 @@ Observed in one user-supplied device project (not a general schema guarantee):
 - All 35 WAV files referenced by that project were found in its companion folder.
 - There are 35 occupied instrument layers in the first drum track.
 
-## Exporter behavior (0.2.2)
+## Exporter behavior (0.2.3)
 
 Native export reads a caller-supplied reference at runtime; it does not bundle
 or distribute the user's project. Templates with unknown versions, multiple drum
@@ -33,7 +33,11 @@ tracks, or no empty-pad prototype are rejected. The template is never modified.
   remain. This is not a fully documented manufacturer schema.
 - Output is reread through gzip/JSON and checked for pad counts, layer counts,
   full sample end frames, old events and invalid/missing audio paths.
-- Unique export directories prevent overwriting projects. Failed output is removed.
+- Project names and companion directories use the kit name, sanitized for filesystems.
+  Repeated exports receive numbered suffixes without overwriting existing output.
+  Generated notes place the XPJ and companion directory directly under
+  `MPC-Sample/Projects`, matching eight inspected device-saved projects.
+  Failed output is removed.
 
 ## Validation evidence
 
