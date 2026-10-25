@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.2.0 prototype
+## Current release: 0.2.1 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -101,7 +101,11 @@ application's code; it does not relicense any imported sample content.
 ## Audio details and build identity
 
 Select a library sound or populated pad to see duration, bit rate, PCM bit depth,
-sample rate and channel count beneath the library. Header reads happen in the
+sample rate and channel count beneath the library. **Show in Finder** reveals that
+file, including when metadata or preview fails. Its path is displayed and can be
+copied. Stopping playback keeps the inspected file available. Metadata failures
+show the underlying error; metadata and playback use separate readers, so a
+metadata failure alone does not establish that the audio cannot play or export. Header reads happen in the
 background; stale selections cannot overwrite the current details. Compressed
 durations are marked approximate, and unavailable properties are labeled. Bit
 rate is audio data per second (kb/s); bit depth is shown separately for PCM.

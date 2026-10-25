@@ -62,6 +62,7 @@ func scanFiles(_ root: URL) -> [Sample] {
     @Published var playing: String?
     @Published var sampleDetails = "Select a sample to see its audio details."
     @Published var detailName: String?
+    @Published var detailPath: String?
     private var detailTask: Task<Void, Never>?
     private var previewID = UUID()
     // AVPlayer opens and buffers media asynchronously instead of decoding the
@@ -99,9 +100,14 @@ func scanFiles(_ root: URL) -> [Sample] {
     }
     func preview(_ sample: Sample?) {
         stopPreview()
-        guard let sample else { return }
+        guard let sample else {
+            detailName = nil; detailPath = nil
+            sampleDetails = "Select a sample to see its audio details."
+            return
+        }
         let requestID = previewID
         detailName = sample.name
+        detailPath = sample.path
         sampleDetails = "Reading audio details…"
         detailTask = Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
@@ -110,7 +116,8 @@ func scanFiles(_ root: URL) -> [Sample] {
             guard !Task.isCancelled, let self, self.previewID == requestID else { return }
             switch result {
             case .success(let details): self.sampleDetails = details.summary
-            case .failure: self.sampleDetails = "Audio details unavailable for this file."
+            case .failure(let error):
+                self.sampleDetails = "Audio details unavailable: \(error.localizedDescription)"
             }
         }
         let item = AVPlayerItem(url: URL(fileURLWithPath: sample.path))
@@ -134,12 +141,18 @@ func scanFiles(_ root: URL) -> [Sample] {
         previewID = UUID()
         detailTask?.cancel()
         detailTask = nil
-        detailName = nil
-        sampleDetails = "Select a sample to see its audio details."
+        // Keep the last selected file visible for inspection after stopping.
+        if sampleDetails == "Reading audio details…" { sampleDetails = "Audio details reading stopped. Select Preview to retry." }
         previewObservation = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
         playing = nil
+    }
+    func revealSample() {
+        guard let path = detailPath else { return }
+        if !NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "") {
+            status = "Could not reveal file in Finder: \(path)"
+        }
     }
     func assign(_ sample: Sample?, at target: Int? = nil) {
         guard let sample else { return }
@@ -307,8 +320,17 @@ struct ContentView: View {
                         }
                     }.listStyle(.inset).onChange(of: model.selected) { _ in model.preview(model.current) }
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(model.detailName ?? "SAMPLE DETAILS").font(.caption.bold()).lineLimit(1)
-                        Text(model.sampleDetails).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Text(model.detailName ?? "SAMPLE DETAILS").font(.caption.bold()).lineLimit(1)
+                            Spacer()
+                            Button("Show in Finder", action: model.revealSample)
+                                .disabled(model.detailPath == nil)
+                        }
+                        Text(model.sampleDetails).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        if let path = model.detailPath {
+                            Text(path).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                                .lineLimit(2).textSelection(.enabled).help(path)
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 4)
                 }.padding(18).frame(minWidth: 300, idealWidth: 370)
                 VStack(alignment: .leading, spacing: 16) {
@@ -413,8 +435,11 @@ struct ContentView: View {
             precondition(model.playing == "short")
             model.stopPreview()
             precondition(model.playing == nil)
+            precondition(model.detailPath == short.path)
             RunLoop.current.run(until: Date().addingTimeInterval(0.3))
             precondition(model.playing == nil)
+            model.preview(nil)
+            precondition(model.detailPath == nil && model.detailName == nil)
             print("PASS: 20 rapid preview replacements (including 3-minute audio) in \(String(format: "%.3f", elapsed))s; newest selection wins; stop remains stopped")
             exit(0)
         }
