@@ -14,7 +14,6 @@ MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 - Auto-fill empty pads in the current bank using the current library filters.
 - Save/open editable `.marspad` kit plans. These reference original absolute paths.
 - Export unchanged sample copies and a CSV pad map into a fresh output folder.
-
 - Export a native `.xpj` plus companion audio directory using a device-saved template.
 
 Native export is experimental. **A previous generated project failed to load on
@@ -26,6 +25,41 @@ A16 → B01 and H16. This supports the tested workflow on that unit, rather than
 establishing compatibility for every project or firmware version.
 Audio-only export remains available for manual assignment. The app writes new
 folders, never firmware or device system files.
+
+## Getting started in pictures
+
+The sample collections shown below are supplied by the user and are not bundled
+with MarsPad.
+
+### 1. Choose your sample library
+
+![Choose Library dialog with an extracted Samples From Mars folder selected](docs/screenshots/choose-library.png)
+
+*Click **Choose Library…** and select the folder containing your extracted samples.
+MarsPad indexes the audio without changing the original files. For responsive
+previewing, choose a locally downloaded library rather than cloud-only files.*
+
+### 2. Browse your sounds
+
+![MarsPad library with All collections and All sounds selected beside an empty pad bank](docs/screenshots/library-overview.png)
+
+*Use **All collections** and **All sounds** to browse the selected library. The
+sample list is on the left; the selected bank's 16 pads are on the right.*
+
+### 3. Narrow the collection
+
+![Collection menu showing the sample collections discovered in the library](docs/screenshots/collection-filter.png)
+
+*Open the collection menu to focus on one pack or instrument collection, or keep
+**All collections** selected to browse across the library.*
+
+### 4. Filter by sound type
+
+![Kick filter applied to the Dr Bohm From Mars collection, showing three matching sounds](docs/screenshots/sound-type-filter.png)
+
+*Combine collection and sound-type filters to narrow your choices—for example,
+**Kick** sounds from **Dr Bohm From Mars**. These filters also determine which
+sounds **Auto-fill Empty Pads** can choose.*
 
 ## Export to MPC Sample
 
