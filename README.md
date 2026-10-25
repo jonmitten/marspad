@@ -21,8 +21,9 @@ Native export is experimental. **A previous generated project failed to load on
 the hardware.** Version 0.2.4 preserves native serialization order and scalar
 formatting. A user subsequently confirmed a successful three-sample load with
 correct assignments at A01, A02 and A11, full playback, and a device save/reload
-round trip. All-bank validation remains outstanding; this is not a blanket
-compatibility claim.
+round trip. Subsequent user testing confirmed bank order across A–H, including
+A16 → B01 and H16. This supports the tested workflow on that unit, rather than
+establishing compatibility for every project or firmware version.
 Audio-only export remains available for manual assignment. The app writes new
 folders, never firmware or device system files.
 

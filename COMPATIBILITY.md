@@ -66,7 +66,9 @@ serialization correction, the user reported a successful hardware load on
 
 The user also confirmed full playback and saving/reloading the test project on
 the MPC Sample, with those assignments retained. This validates that workflow
-for this three-sample kit on the tested unit.
+for this three-sample kit on the tested unit. In a subsequent test, the user
+confirmed assignments across banks A–H, including A16 → B01 and H16, matching
+MarsPad's layout.
 It is consistent with the serialization correction resolving this case, but does
 not independently isolate field ordering versus numeric formatting as the cause.
 
@@ -83,8 +85,9 @@ and the original reference archive remain unchanged.
 ## Remaining hardware validation
 
 A three-sample Bank A project has been reported to load, play fully and survive a
-device save/reload round trip with correct assignments. Bank boundaries and pad
-order across A–H remain untested on hardware. Broader verification should also
+device save/reload round trip with correct assignments. The user also confirmed
+bank order across A–H and the A16 → B01 and H16 boundary checks. These results
+support the tested workflow on this unit. Broader verification should still
 check empty pads, levels/envelopes, routing and inherited controller state.
 This evidence does not establish all-project or all-firmware compatibility.
 A blank project saved by the same unit would improve the reference.
