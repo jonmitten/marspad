@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.1.1 prototype
+## Current release: 0.1.2 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -41,7 +41,8 @@ unused sounds matching the current filters. It keeps occupied pads and avoids
 reusing files assigned anywhere in the kit. If too few eligible sounds remain,
 the status explains why some pads are empty. Category
 inference is based on folder/name tokens; ambiguous names appear under Other.
-Clear a pad using its context menu. Save Kit before quitting; there is no autosave.
+Clear a pad using its context menu. Clear Bank A–H removes every assignment in
+the selected bank while keeping the other banks unchanged. Save Kit before quitting; there is no autosave.
 Saved kits are machine-local plans; moving sample folders breaks their references.
 
 ## Native format investigation

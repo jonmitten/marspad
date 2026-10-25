@@ -94,6 +94,15 @@ func scanFiles(_ root: URL) -> [Sample] {
         guard let sample else { return }
         kit.pads[target ?? index] = sample; dirty = true
     }
+    func clearBank() {
+        let range = (bank * 16)..<(bank * 16 + 16)
+        let count = kit.pads[range].compactMap { $0 }.count
+        guard count > 0 else { return }
+        for index in range { kit.pads[index] = nil }
+        stopPreview()
+        dirty = true
+        status = "Cleared \(count) pads in bank \(String(UnicodeScalar(65 + bank)!)). Other banks unchanged."
+    }
     func autoFill() {
         let available = filtered
         var used = Set(kit.pads.compactMap { $0?.path })
@@ -217,6 +226,9 @@ struct ContentView: View {
                     HStack(spacing: 7) {
                         ForEach(0..<8) { b in Button(String(UnicodeScalar(65+b)!)) { model.bank = b }.buttonStyle(.borderedProminent).tint(model.bank == b ? .orange : .gray.opacity(0.35)) }
                         Spacer()
+                        Button("Clear Bank \(String(UnicodeScalar(65 + model.bank)!))", action: model.clearBank)
+                            .disabled(!model.kit.pads[(model.bank * 16)..<(model.bank * 16 + 16)].contains { $0 != nil })
+                            .help("Clear all 16 pad assignments in the selected bank")
                         Text("\(model.kit.pads.compactMap { $0 }.count)/128").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
                     LazyVGrid(columns: grid, spacing: 10) {
@@ -299,7 +311,17 @@ struct ContentView: View {
             m.category = "All sounds"; m.autoFill()
             precondition(m.kit.pads[2]?.category == "Snare")
             precondition(m.kit.pads.prefix(16).compactMap { $0 }.count == 16)
-            print("PASS: classification, persistence, filtered fill, full single-category banks, category priority, shortage message, cross-bank duplicate prevention, repeat-fill stability")
+            for targetBank in [0, 3, 7] {
+                m.kit.pads = Array(repeating: first, count: 128)
+                m.bank = targetBank; m.dirty = false
+                m.clearBank()
+                precondition(m.dirty)
+                for i in 0..<128 {
+                    precondition((m.kit.pads[i] == nil) == (i / 16 == targetBank))
+                }
+                m.dirty = false; m.clearBank(); precondition(!m.dirty)
+            }
+            print("PASS: classification, persistence, filtered fill, full single-category banks, category priority, shortage message, cross-bank duplicate prevention, repeat-fill stability, selected-bank clearing and empty-bank no-op")
             exit(0)
         }
     }
