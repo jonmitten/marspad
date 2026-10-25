@@ -13,14 +13,43 @@ Observed in one user-supplied device project (not a general schema guarantee):
 - All 35 WAV files referenced by that project were found in its companion folder.
 - There are 35 occupied instrument layers in the first drum track.
 
-The inspected file includes existing sequences, effects, trim settings and other
-parameters. Copying its full program as a kit template could inadvertently inherit
-those settings. Native export requires neutral parameter semantics, sample length
-and trim rules, empty-pad behavior, bank numbering and project round-trip checks.
-A minimal blank device project and hardware load/save verification would strengthen
-that evidence. No native export is enabled until those questions are resolved.
+## Exporter behavior (0.2.0)
 
-The guide documents 16 pads × 8 banks, supported import formats/rates, and the
-`MPC-Sample/Samples` default directory. It does not document the serialized schema.
-The app currently exports unchanged audio and a human-readable map only. No claim
-of native project compatibility or hardware validation is made.
+Native export reads a caller-supplied reference at runtime; it does not bundle
+or distribute the user's project. Templates with unknown versions, multiple drum
+tracks, or no empty-pad prototype are rejected. The template is never modified.
+
+- Every instrument is cloned from the reference's empty-pad settings.
+- Samples populate the first of eight layers; other layers remain unassigned.
+- Every output is a 24-bit PCM WAV with supported source rate and channel count.
+- `sliceInfo.End` uses frame count minus one, as observed in untrimmed reference
+  pads. The reference's zero sampleStart/sampleEnd sentinel fields are retained.
+- Project-level and drum-track sample inventories are rebuilt.
+- Sequence events/automation, song items, effects, and old sample references are
+  cleared recursively. Existing routing and unknown device/controller defaults
+  remain. This is not a fully documented manufacturer schema.
+- Output is reread through gzip/JSON and checked for pad counts, layer counts,
+  full sample end frames, old events and invalid/missing audio paths.
+- Unique export directories prevent overwriting projects. Failed output is removed.
+
+## Validation evidence
+
+Integration tests export 128 distinct generated WAV files across all eight banks,
+and sparse assignments at A01, A16, B01, D16 and H16. They independently decode
+the result, verify 24-bit sample payloads against known source values, frame
+counts, channels and sample rates, verify empty layers/pads, rebuild a ZIP and
+cross-check with the independent project inspector. Raw XPJ and ZIP templates
+are exercised, as are invalid/missing inputs and failure cleanup. Source hashes
+and the original reference archive remain unchanged.
+
+## Remaining hardware validation
+
+**No generated project has yet been loaded and saved successfully on an MPC
+Sample.** Pad order is inferred from the reference, not confirmed on hardware.
+A hardware load/save round trip must verify pad order across A–H, full sample
+playback, levels/envelopes, routing, empty pads, and absence of inherited controller
+state. A blank project saved by the same unit would improve the reference.
+
+The guide documents 16 pads × 8 banks, supported audio rates and formats, and SD
+Card Access. It does not define the serialized schema. Structural tests do not
+establish hardware compatibility; app and reports clearly retain that distinction.

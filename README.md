@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.1.4 prototype
+## Current release: 0.2.0 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -15,10 +15,42 @@ MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 - Save/open editable `.marspad` kit plans. These reference original absolute paths.
 - Export unchanged sample copies and a CSV pad map into a fresh output folder.
 
-**Native MPC Sample project export is not implemented or hardware validated.**
-Audio exports do not automatically load pad assignments on the MPC. They are for
-manual import. The app never writes to firmware or device system files.
-It does not convert audio: verify import compatibility before transfer.
+- Export a native `.xpj` plus companion audio directory using a device-saved template.
+
+Native export has passed structural and audio checks. **Hardware validation is
+pending**: verify a separate small project on your device before relying on it.
+Audio-only export remains available for manual assignment. The app writes new
+folders, never firmware or device system files.
+
+## Export to MPC Sample
+
+1. Save your kit plan, then choose **Export MPC…**.
+2. On first export, select a project saved by your MPC Sample: an `.xpj` or a ZIP
+   containing one. A template with at least one empty pad is required. This
+   release accepts only AC50 / engine Sample / schema 28 / preamble 1.3.0.12.
+   The supplied template stays unchanged and is not bundled in the source code.
+3. Choose a local destination. The app writes a fresh `MarsPad-<id>` folder with
+   `MarsPad-<id>.xpj`, `MarsPad-<id>_[ProjectData]/`, an assignment report, and notes.
+4. Copy that whole folder to a separate location on your microSD card. Keep the
+   `.xpj` beside its matching audio folder. Safely eject the card before leaving
+   SD Card Access mode.
+5. Save your current MPC project, load the exported `.xpj` via the Project menu,
+   and verify bank boundaries, full sample playback, and empty pads. This is the
+   remaining hardware validation step; software checks cannot establish it.
+
+The template path is remembered. Right-click Export MPC… and choose Change MPC
+Template… to select another reference. Export snapshots the kit so subsequent
+edits do not change an in-progress export.
+
+Audio is streamed into 24-bit PCM WAVs, retaining source rate and channels.
+Mono/stereo at 44.1, 48, or 96 kHz and up to 20 minutes per sample are supported;
+other rates/channels or unreadable files fail with the affected pad identified.
+Sources are not normalized or changed. Export uses the template's empty-pad
+settings for every instrument, sets each sample's full inclusive end frame,
+clears old sample references, sequence events, song items and effects, and retains
+routing and other unknown schema defaults. It creates a clean kit, not a copy of
+the template's music. Other retained device/controller defaults still need a
+hardware check. Partial exports are removed on failure.
 
 ## Build and run
 
@@ -53,7 +85,11 @@ Saved kits are machine-local plans; moving sample folders breaks their reference
 `python3 tools/inspect_project.py /path/to/project.zip` performs a read-only archive
 integrity and sample-reference check, printing inferred assignments. It does not
 extract files, execute project content, or generate device projects.
-See COMPATIBILITY.md for observations and remaining work.
+`python3 tools/test_native_export.py /path/to/MarsPad /path/to/reference.zip`
+checks native exports using generated audio and your read-only reference.
+It covers all banks, sparse assignments, PCM payloads, sample lengths, missing
+files, invalid templates, unsupported rates, and cleanup. No proprietary fixture
+is committed. See COMPATIBILITY.md for evidence and limits.
 
 ## Repository boundaries
 
