@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
+import unicodedata
 import wave
 import zipfile
 
@@ -57,6 +58,10 @@ def main():
             expected = sum(s is not None for s in values)
             assert len(list(audio_folder.glob('*.wav'))) == expected
             assert len(data['samples']) == len(track['samples']) == expected
+            export_report = json.loads((folder / 'Export Report.json').read_text())
+            report_by_pad = {entry['pad']: entry for entry in export_report['assignments']}
+            display_names = [entry['name'].lower() for entry in data['samples']]
+            assert len(display_names) == len(set(display_names)), 'Duplicate native sample identities'
             for i, item in enumerate(values):
                 layers = instruments[i]['layersv']
                 assert len(layers) == 8
@@ -65,9 +70,20 @@ def main():
                     assert not layers[0]['sampleFile']
                     continue
                 name = f'{chr(65+i//16)}{i%16+1:02d}'
-                assert layers[0]['sampleFile'] == name + '.wav'
-                assert layers[0]['sampleName'] == name
-                with wave.open(item['path']) as original, wave.open(str(audio_folder / (name + '.wav'))) as actual:
+                original_name = Path(item['path']).stem
+                duplicate = sum(v is not None and Path(v['path']).stem.lower() == original_name.lower() for v in values) > 1
+                expected_name = original_name + (f' [{name}]' if duplicate else '')
+                record = report_by_pad[name]
+                filename = layers[0]['sampleFile']
+                assert filename.startswith(name + '_') and filename.endswith('.wav')
+                assert len(filename) <= 128 and not any(c in filename for c in '/\\:*?"<>|')
+                assert unicodedata.normalize('NFC', layers[0]['sampleName']) == unicodedata.normalize('NFC', expected_name)
+                assert unicodedata.normalize('NFC', record['sourceName']) == unicodedata.normalize('NFC', original_name)
+                assert unicodedata.normalize('NFC', record['sampleName']) == unicodedata.normalize('NFC', expected_name)
+                assert record['file'] == filename
+                assert any(unicodedata.normalize('NFC', e['name']) == unicodedata.normalize('NFC', expected_name) and e['path'] == filename for e in data['samples'])
+                assert any(unicodedata.normalize('NFC', e['name']) == unicodedata.normalize('NFC', expected_name) and e['path'] == filename for e in track['samples'])
+                with wave.open(item['path']) as original, wave.open(str(audio_folder / filename)) as actual:
                     assert actual.getsampwidth() == 3
                     assert actual.getnchannels() == original.getnchannels()
                     assert actual.getframerate() == original.getframerate()
@@ -98,6 +114,15 @@ def main():
             return project
 
         export(pads)
+        # Same basenames from different folders must retain distinct identities.
+        import shutil
+        collisions = [None] * 128
+        for i, basename in [(0, 'Kick'), (1, 'kick'), (15, 'Café Hat #1'), (16, 'Unsafe : name?'), (127, 'Long' * 50)]:
+            folder = root / f'names-{i}'; folder.mkdir()
+            path = folder / (basename + '.wav')
+            shutil.copyfile(pads[i]['path'], path)
+            collisions[i] = dict(pads[i], path=str(path))
+        export(collisions)
         sparse = [None] * 128
         for i in [0, 15, 16, 63, 127]: sparse[i] = pads[i]
         export(sparse)
@@ -121,7 +146,7 @@ def main():
         export(values, ok=False)
         assert hashlib.sha256(template.read_bytes()).digest() == original_hash
         assert all(hashlib.sha256(p.read_bytes()).digest() == digest for p, digest in source_hashes.items())
-        print('PASS: 128-pad / 8-bank exports; sparse banks; archive and raw templates; 24-bit PCM payload/rate/channel/frame accuracy; no stale samples/events; independent reference inspection; failures clean up; originals unchanged')
+        print('PASS: original/Unicode/duplicate/long sample names; safe filenames; 128-pad / 8-bank exports; sparse banks; archive and raw templates; 24-bit PCM payload/rate/channel/frame accuracy; no stale samples/events; independent reference inspection; failures clean up; originals unchanged')
 
 
 if __name__ == '__main__':

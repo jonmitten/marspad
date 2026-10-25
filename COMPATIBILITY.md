@@ -13,7 +13,7 @@ Observed in one user-supplied device project (not a general schema guarantee):
 - All 35 WAV files referenced by that project were found in its companion folder.
 - There are 35 occupied instrument layers in the first drum track.
 
-## Exporter behavior (0.2.0)
+## Exporter behavior (0.2.2)
 
 Native export reads a caller-supplied reference at runtime; it does not bundle
 or distribute the user's project. Templates with unknown versions, multiple drum
@@ -21,6 +21,9 @@ tracks, or no empty-pad prototype are rejected. The template is never modified.
 
 - Every instrument is cloned from the reference's empty-pad settings.
 - Samples populate the first of eight layers; other layers remain unassigned.
+- Original sample names populate layer and inventory names. Duplicate names receive
+  pad suffixes to preserve distinct identities. Audio filenames use pad prefixes
+  plus a sanitized/truncated original name; reports retain exact source names.
 - Every output is a 24-bit PCM WAV with supported source rate and channel count.
 - `sliceInfo.End` uses frame count minus one, as observed in untrimmed reference
   pads. The reference's zero sampleStart/sampleEnd sentinel fields are retained.

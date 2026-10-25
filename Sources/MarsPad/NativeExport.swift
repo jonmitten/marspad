@@ -101,6 +101,33 @@ enum NativeExport {
         return object
     }
 
+    static func filename(pad: String, sampleName: String) -> String {
+        // Portable filenames for removable media; display names stay intact in XPJ.
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-().#[]")
+        let safe = sampleName.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
+        let stem = String(safe.prefix(120)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return pad + "_" + (stem.isEmpty ? "Sample" : stem) + ".wav"
+    }
+
+    static func sampleNames(_ pads: [Sample?]) -> [Int: String] {
+        func key(_ name: String) -> String { name.precomposedStringWithCanonicalMapping.lowercased() }
+        let counts = Dictionary(grouping: pads.compactMap { $0 }, by: { key($0.name) }).mapValues { $0.count }
+        var used = Set<String>()
+        var names: [Int: String] = [:]
+        for (index, sample) in pads.enumerated() {
+            guard let sample else { continue }
+            let pad = String(format: "%@%02d", String(UnicodeScalar(65 + index / 16)!), index % 16 + 1)
+            var name = counts[key(sample.name)] == 1 ? sample.name : sample.name + " [" + pad + "]"
+            var suffix = 2
+            while !used.insert(key(name)).inserted {
+                name = sample.name + " [" + pad + "-" + String(suffix) + "]"
+                suffix += 1
+            }
+            names[index] = name
+        }
+        return names
+    }
+
     static func writeAudio(_ source: URL, to destination: URL) throws -> Int64 {
         let input = try AVAudioFile(forReading: source)
         let format = input.processingFormat
@@ -150,10 +177,12 @@ enum NativeExport {
         let audioFolder = destination.appendingPathComponent(base + "_[ProjectData]")
         try FileManager.default.createDirectory(at: audioFolder, withIntermediateDirectories: false)
         var map: [[String: Any]] = []
+        let displayNames = sampleNames(kit.pads)
         for (index, sample) in kit.pads.enumerated() {
             guard let sample else { continue }
             let name = String(format: "%@%02d", String(UnicodeScalar(65 + index / 16)!), index % 16 + 1)
-            let filename = name + ".wav"
+            let displayName = displayNames[index]!
+            let filename = filename(pad: name, sampleName: sample.name)
             progress("Writing \(name): \(sample.name)")
             let audioURL = audioFolder.appendingPathComponent(filename)
             let frames: Int64
@@ -162,7 +191,7 @@ enum NativeExport {
             let details = try SampleDetails.read(audioURL)
             guard details.bitDepth == 24, !details.compressed else { throw ExportFailure("Output audio validation failed for \(name).") }
             var layers = instruments[index]["layersv"] as! [[String: Any]]
-            layers[0]["sampleName"] = name
+            layers[0]["sampleName"] = displayName
             layers[0]["sampleFile"] = filename
             // The device stores an inclusive last frame in sliceInfo.End.
             var slice = layers[0]["sliceInfo"] as! [String: Any]
@@ -170,9 +199,9 @@ enum NativeExport {
             slice["LoopStart"] = 0; slice["LoopMode"] = 0
             layers[0]["sliceInfo"] = slice
             instruments[index]["layersv"] = layers
-            sampleEntries.append(["version": 1, "name": name, "path": filename, "loadImpl": 0,
+            sampleEntries.append(["version": 1, "name": displayName, "path": filename, "loadImpl": 0,
                                   "metadata": ["tempo": 0.0, "rootNote": 60, "tune": 0.0, "key": ""]])
-            map.append(["pad": name, "sourceName": sample.name, "file": filename, "frames": frames,
+            map.append(["pad": name, "sourceName": sample.name, "sampleName": displayName, "file": filename, "frames": frames,
                         "sampleRate": details.sampleRate, "channels": details.channels])
         }
         drum["instruments"] = instruments
@@ -228,17 +257,27 @@ enum NativeExport {
             for layer in layers {
                 if let file = layer["sampleFile"] as? String, !file.isEmpty {
                     let pad = String(format: "%@%02d", String(UnicodeScalar(65 + index / 16)!), index % 16 + 1)
-                    guard actual[pad] == nil, file == pad + ".wav",
+                    guard let entry = expected.first(where: { $0["pad"] as? String == pad }),
+                          actual[pad] == nil, file == entry["file"] as? String,
+                          file.hasPrefix(pad + "_"), !file.contains("/"), !file.contains("\\"),
+                          layer["sampleName"] as? String == entry["sampleName"] as? String,
                           FileManager.default.fileExists(atPath: folder.appendingPathComponent(file).path) else { throw ExportFailure("Invalid or missing sample reference at \(pad).") }
                     actual[pad] = file
-                    guard let entry = expected.first(where: { $0["pad"] as? String == pad }),
-                          let frames = entry["frames"] as? Int64,
+                    guard let frames = entry["frames"] as? Int64,
                           let slice = layer["sliceInfo"] as? [String: Any],
                           (slice["End"] as? NSNumber)?.int64Value == frames - 1 else { throw ExportFailure("Invalid sample end frame at \(pad).") }
                 }
             }
         }
         guard actual.count == expected.count else { throw ExportFailure("Generated pad count does not match your kit.") }
+        for inventory in [data["samples"], track["samples"]] {
+            guard let entries = inventory as? [[String: Any]], entries.count == expected.count else { throw ExportFailure("Invalid sample inventory.") }
+            for record in expected {
+                guard entries.filter({ $0["path"] as? String == record["file"] as? String && $0["name"] as? String == record["sampleName"] as? String }).count == 1 else {
+                    throw ExportFailure("Sample name or inventory path did not survive export.")
+                }
+            }
+        }
         var references = Set<String>()
         func walk(_ value: Any) throws {
             if let dict = value as? [String: Any] {

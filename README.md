@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.2.1 prototype
+## Current release: 0.2.2 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -115,3 +115,9 @@ packaged. Builds from modified source have a `-dirty` suffix. Direct `swift run`
 launches show development/unpackaged rather than claiming a release identity.
 An existing binary can be packaged with `./build-app.sh /absolute/path/to/MarsPad`;
 use a binary built from the current checkout so the embedded identity is accurate.
+
+Native exports preserve original sample names in pad layers and sample inventories.
+WAV filenames use `A01_original-name.wav` with filesystem-safe characters and a
+length limit. If sample names repeat (including case variants), pad suffixes such
+as `Kick [A01]` keep native sample identities distinct. Original names are always
+retained in the export report. Hardware display behavior remains unvalidated.
