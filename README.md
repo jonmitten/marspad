@@ -19,8 +19,9 @@ MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
 Native export is experimental. **A previous generated project failed to load on
 the hardware.** Version 0.2.4 preserves native serialization order and scalar
-formatting, but the cause is not confirmed and a successful hardware load/save
-round trip remains required. Structural/audio checks alone do not prove compatibility.
+formatting. A user subsequently confirmed a successful three-sample load with
+correct assignments at A01, A02 and A11. Full playback, device save/reload and
+all-bank validation remain outstanding; this is not a blanket compatibility claim.
 Audio-only export remains available for manual assignment. The app writes new
 folders, never firmware or device system files.
 

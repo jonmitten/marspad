@@ -54,8 +54,19 @@ This is a compatibility hypothesis, not a proven explanation of the device error
 The [cereal archive documentation](https://uscilab.github.io/cereal/serialization_archives.html)
 describes named and unnamed serialization; we do not have the MPC loader source.
 
-No files were written to the card during diagnosis. No replacement export has
-yet been confirmed to load on hardware.
+No files were written to the card during diagnosis. Following the 0.2.4
+serialization correction, the user reported a successful hardware load on
+2026-10-25 with the expected three assignments:
+
+| Pad | Reported sample |
+| --- | --- |
+| A01 | 808 Decay |
+| A02 | CH Combo 808 |
+| A11 | Maracas B 808 |
+
+This is user-reported confirmation of loading and these three Bank A positions.
+It is consistent with the serialization correction resolving this case, but does
+not independently isolate field ordering versus numeric formatting as the cause.
 
 ## Validation evidence
 
@@ -69,11 +80,12 @@ and the original reference archive remain unchanged.
 
 ## Remaining hardware validation
 
-**No generated project has yet been loaded and saved successfully on an MPC
-Sample.** Pad order is inferred from the reference, not confirmed on hardware.
-A hardware load/save round trip must verify pad order across A–H, full sample
-playback, levels/envelopes, routing, empty pads, and absence of inherited controller
-state. A blank project saved by the same unit would improve the reference.
+A three-sample Bank A project has been reported to load with correct assignments.
+A device save/reload round trip has not yet been reported. Full sample playback,
+levels/envelopes, routing, empty pads, and absence of inherited controller state
+still need verification, along with bank boundaries and pad order across A–H.
+This evidence does not establish all-project or all-firmware compatibility.
+A blank project saved by the same unit would improve the reference.
 
 The guide documents 16 pads × 8 banks, supported audio rates and formats, and SD
 Card Access. It does not define the serialized schema. Structural tests do not
