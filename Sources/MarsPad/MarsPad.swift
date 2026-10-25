@@ -59,7 +59,15 @@ func scanFiles(_ root: URL) -> [Sample] {
     @Published var scanning = false
     @Published var dirty = false
     @Published var playing: String?
-    private var player: AVAudioPlayer?
+    // AVPlayer opens and buffers media asynchronously instead of decoding the
+    // whole sample on the interface thread. Reuse one player for every selection.
+    private let player: AVPlayer = {
+        let player = AVPlayer()
+        player.volume = 0.65
+        player.automaticallyWaitsToMinimizeStalling = false
+        return player
+    }()
+    private var previewObservation: NSKeyValueObservation?
     var filtered: [Sample] {
         samples.filter { (collection == "All collections" || $0.collection == collection) && (category == "All sounds" || $0.category == category) && (query.isEmpty || $0.path.localizedCaseInsensitiveContains(query)) }
     }
@@ -85,11 +93,31 @@ func scanFiles(_ root: URL) -> [Sample] {
         }
     }
     func preview(_ sample: Sample?) {
+        stopPreview()
         guard let sample else { return }
-        do { player?.stop(); player = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: sample.path)); player?.volume = 0.65; player?.play(); playing = sample.name; status = "Preview: \(sample.name)" }
-        catch { status = "Preview unavailable: \(error.localizedDescription)" }
+        let item = AVPlayerItem(url: URL(fileURLWithPath: sample.path))
+        previewObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            Task { @MainActor [weak self, weak item] in
+                guard let self, let item, self.player.currentItem === item else { return }
+                if item.status == .failed {
+                    self.playing = nil
+                    self.status = "Preview unavailable: \(item.error?.localizedDescription ?? "Unsupported audio file")"
+                }
+            }
+        }
+        player.replaceCurrentItem(with: item)
+        playing = sample.name
+        status = "Preview: \(sample.name)"
+        player.play()
     }
-    func stopPreview() { player?.stop(); playing = nil }
+    func stopPreview() {
+        // Detach the old item before creating its replacement; stale loads and
+        // callbacks cannot restart it or overwrite the latest selection's status.
+        previewObservation = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        playing = nil
+    }
     func assign(_ sample: Sample?, at target: Int? = nil) {
         guard let sample else { return }
         kit.pads[target ?? index] = sample; dirty = true
@@ -280,6 +308,36 @@ struct ContentView: View {
 }
 @main struct MarsPadApp: App {
     init() {
+        if CommandLine.arguments.contains("--preview-self-test") {
+            let model = Library()
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+            let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44100)!
+            buffer.frameLength = 44100
+            buffer.floatChannelData![0].initialize(repeating: 0, count: 44100)
+            let long = folder.appendingPathComponent("long.wav")
+            let short = folder.appendingPathComponent("short.wav")
+            do {
+                let file = try AVAudioFile(forWriting: long, settings: format.settings)
+                for _ in 0..<180 { try file.write(from: buffer) }
+                let shortFile = try AVAudioFile(forWriting: short, settings: format.settings)
+                try shortFile.write(from: buffer)
+            } catch { fatalError("Fixture creation failed: \(error)") }
+            let start = Date()
+            for n in 0..<20 {
+                model.preview(Sample(path: (n.isMultiple(of: 2) ? long : short).path, collection: "Test", category: "Other"))
+            }
+            let elapsed = Date().timeIntervalSince(start)
+            precondition(model.playing == "short")
+            model.stopPreview()
+            precondition(model.playing == nil)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+            precondition(model.playing == nil)
+            print("PASS: 20 rapid preview replacements (including 3-minute audio) in \(String(format: "%.3f", elapsed))s; newest selection wins; stop remains stopped")
+            exit(0)
+        }
         if CommandLine.arguments.contains("--self-test") {
             precondition(classify("808/WAV/01_Kick/kick_001.wav") == "Kick")
             precondition(classify("606/Open Hats/OH_02.wav") == "Open Hat")

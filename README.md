@@ -3,11 +3,13 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.1.2 prototype
+## Current release: 0.1.3 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
-- Audition audio using macOS audio playback (format support depends on macOS).
+- Audition audio using asynchronous macOS playback; selecting a sound immediately
+  detaches the previous preview without waiting for a full-file decode. Format
+  support depends on macOS.
 - Assign samples to 16 pads across banks A–H by dragging or using Assign Selected Sound.
 - Auto-fill empty pads in the current bank using the current library filters.
 - Save/open editable `.marspad` kit plans. These reference original absolute paths.
@@ -30,7 +32,8 @@ open dist/MarsPad.app
 The build is locally ad-hoc signed; public distribution would require release
 packaging, signing and notarization. Run `swift test` for model checks.
 If XCTest is unavailable in Command Line Tools, run `swift run MarsPad --self-test`
-for the built-in model checks.
+for the built-in model checks. `swift run MarsPad --preview-self-test` exercises
+rapid switching with generated silent audio, including a three-minute file.
 Only the development Mac architecture is built by default. Windows/Linux are
 future work; the SwiftUI interface would need replacement or a separate frontend.
 
