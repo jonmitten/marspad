@@ -64,7 +64,9 @@ serialization correction, the user reported a successful hardware load on
 | A02 | CH Combo 808 |
 | A11 | Maracas B 808 |
 
-This is user-reported confirmation of loading and these three Bank A positions.
+The user also confirmed full playback and saving/reloading the test project on
+the MPC Sample, with those assignments retained. This validates that workflow
+for this three-sample kit on the tested unit.
 It is consistent with the serialization correction resolving this case, but does
 not independently isolate field ordering versus numeric formatting as the cause.
 
@@ -80,10 +82,10 @@ and the original reference archive remain unchanged.
 
 ## Remaining hardware validation
 
-A three-sample Bank A project has been reported to load with correct assignments.
-A device save/reload round trip has not yet been reported. Full sample playback,
-levels/envelopes, routing, empty pads, and absence of inherited controller state
-still need verification, along with bank boundaries and pad order across A–H.
+A three-sample Bank A project has been reported to load, play fully and survive a
+device save/reload round trip with correct assignments. Bank boundaries and pad
+order across A–H remain untested on hardware. Broader verification should also
+check empty pads, levels/envelopes, routing and inherited controller state.
 This evidence does not establish all-project or all-firmware compatibility.
 A blank project saved by the same unit would improve the reference.
 
