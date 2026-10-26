@@ -7,6 +7,9 @@ struct Sample: Identifiable, Codable, Hashable {
     var path: String
     var collection: String
     var category: String
+    var tags: [String]? = nil
+    var musicalKey: String? = nil
+    var soundTypes: Set<String> { Set(tags ?? Array(soundTypesForSample(path))).union([category]).subtracting(category == "Other" && tags != nil ? ["Other"] : []) }
     var id: String { path }
     var name: String { URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent }
 }
@@ -15,43 +18,20 @@ struct Kit: Codable {
     var name = "Untitled Kit"
     var pads: [Sample?] = Array(repeating: nil, count: 128)
 }
-func classify(_ path: String) -> String {
-    let text = path.lowercased().replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
-    let rules: [(String, [String])] = [
-        ("Loops", ["loops", "loop", "breaks"]), ("Kick", ["kick", "kicks", "kik", "bd"]),
-        ("Snare", ["snare", "snares", "snr", "sd"]), ("Clap", ["clap", "claps", "clp"]),
-        ("Open Hat", ["open hat", "open hats", "ohh", "oh"]),
-        ("Closed Hat", ["closed hat", "closed hats", "hihat", "hi hat", "hats", "hat", "chh", "hh"]),
-        ("Tom", ["tom", "toms"]), ("Cymbal", ["cymbal", "cymbals", "crash", "ride", "cym"]),
-        ("Percussion", ["perc", "percussion", "conga", "bongo", "cowbell", "rim", "shaker", "tamb"]),
-        ("Bass", ["bass"])]
-    let words = Set(text.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
-    for (category, tokens) in rules {
-        if tokens.contains(where: { $0.contains(" ") ? text.contains($0) : words.contains($0) }) { return category }
-    }
-    return "Other"
-}
-
-func scanFiles(_ root: URL) -> [Sample] {
-                let fm = FileManager.default
-                guard let e = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else { return [] }
-                var result: [Sample] = []
-                for case let url as URL in e {
-                    guard ["wav", "aif", "aiff", "mp3", "flac", "ogg", "snd"].contains(url.pathExtension.lowercased()),
-                          (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
-                    let relative = String(url.path.dropFirst(root.path.count + 1))
-                    let parts = relative.split(separator: "/")
-                    result.append(Sample(path: url.path, collection: parts.count > 1 ? String(parts[0]) : root.lastPathComponent, category: classify(relative)))
-                }
-                return result.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-}
-
 @MainActor final class Library: ObservableObject {
-    @Published var samples: [Sample] = []
+    @Published var samples: [Sample] = [] { didSet { cachedFiltered = nil; cachedCollections = nil; cachedKeys = nil } }
+    private var cachedFiltered: [Sample]?
+    private var cachedCollections: [String]?
+    private var cachedKeys: [String]?
     @Published var kit = Kit()
-    @Published var query = ""
-    @Published var collection = "All collections"
-    @Published var category = "All sounds"
+    @Published var query = "" { didSet { cachedFiltered = nil } }
+    @Published var collection = "All collections" { didSet { cachedFiltered = nil } }
+    @Published var category = "All sounds" { didSet { cachedFiltered = nil } }
+    @Published var excludedTypes = Set<String>() { didSet { cachedFiltered = nil } }
+    @Published var keyFilter = "All keys" { didSet { cachedFiltered = nil } }
+    @Published var searchCollectionNotes = false { didSet { cachedFiltered = nil } }
+    @Published var collectionNotes: [String: CollectionNotes] = [:] { didSet { cachedFiltered = nil } }
+    @Published var indexedDocuments = 0
     @Published var selected: String?
     @Published var bank = 0
     @Published var pad = 0
@@ -75,11 +55,60 @@ func scanFiles(_ root: URL) -> [Sample] {
     }()
     private var previewObservation: NSKeyValueObservation?
     var filtered: [Sample] {
-        samples.filter { (collection == "All collections" || $0.collection == collection) && (category == "All sounds" || $0.category == category) && (query.isEmpty || $0.path.localizedCaseInsensitiveContains(query)) }
+        if let cachedFiltered { return cachedFiltered }
+        let search = SoundQuery(query)
+        let result = samples.filter {
+            (collection == "All collections" || $0.collection == collection) &&
+            (category == "All sounds" || $0.soundTypes.contains(category)) &&
+            $0.soundTypes.isDisjoint(with: excludedTypes) &&
+            (keyFilter == "All keys" || $0.musicalKey == keyFilter) &&
+            search.matches($0, notes: collectionNotes[$0.collection], includeCollectionNotes: searchCollectionNotes)
+        }
+        cachedFiltered = result
+        return result
     }
-    var collections: [String] { ["All collections"] + Set(samples.map(\.collection)).sorted() }
-    var categories: [String] { ["All sounds"] + Set(samples.map(\.category)).sorted() }
-    var current: Sample? { samples.first { $0.id == selected } }
+    var collections: [String] {
+        if let cachedCollections { return cachedCollections }
+        let result = ["All collections"] + Set(samples.map(\.collection)).sorted()
+        cachedCollections = result; return result
+    }
+    var categories: [String] { ["All sounds"] + soundTypeNames }
+    var musicalKeys: [String] {
+        if let cachedKeys { return cachedKeys }
+        let result = ["All keys"] + Set(samples.compactMap(\.musicalKey)).sorted()
+        cachedKeys = result; return result
+    }
+    var current: Sample? { filtered.first { $0.id == selected } }
+    var inspected: Sample? { samples.first { $0.path == detailPath } ?? kit.pads.compactMap { $0 }.first { $0.path == detailPath } }
+    var inspectedNotes: CollectionNotes? { inspected.flatMap { collectionNotes[$0.collection] } }
+    var referenceDetails: String? {
+        guard let sample = inspected, let notes = inspectedNotes else { return nil }
+        let details = notes.details(for: sample)
+        return details.isEmpty ? nil : details
+    }
+    func clearSelectedPad() {
+        guard kit.pads[index] != nil else { return }
+        kit.pads[index] = nil; dirty = true
+        status = "Cleared pad \(String(UnicodeScalar(65 + bank)!))\(String(format: "%02d", pad + 1))."
+    }
+    func shortcut(_ action: PadShortcut) {
+        switch action {
+        case .assign: assign(current)
+        case .clear: clearSelectedPad()
+        case .preview: preview(current)
+        case .stop: stopPreview(); status = "Preview stopped."
+        case .bank(let target): bank = min(7, max(0, target))
+        case .pad(let horizontal, let vertical):
+            let column = min(3, max(0, pad % 4 + horizontal))
+            let row = min(3, max(0, pad / 4 + vertical))
+            pad = row * 4 + column
+        case .sample(let direction):
+            let sounds = filtered
+            guard !sounds.isEmpty else { return }
+            let next = sounds.firstIndex(where: { $0.id == selected }).map { min(sounds.count - 1, max(0, $0 + direction)) } ?? 0
+            selected = sounds[next].id
+        }
+    }
     var index: Int { bank * 16 + pad }
     func chooseFolder() {
         let p = NSOpenPanel(); p.canChooseDirectories = true; p.canChooseFiles = false
@@ -91,11 +120,13 @@ func scanFiles(_ root: URL) -> [Sample] {
         scanning = true; status = "Scanning sample names…"
         UserDefaults.standard.set(root.path, forKey: "libraryRoot")
         Task {
-            let found = await Task.detached(priority: .userInitiated) { () -> [Sample] in
-                scanFiles(root)
+            let found = await Task.detached(priority: .userInitiated) { () -> LibraryIndex in
+                LibraryIndex.scan(root)
             }.value
-            samples = found; scanning = false; collection = "All collections"; category = "All sounds"
-            status = "\(found.count.formatted()) audio files indexed. Originals stay in place."
+            samples = found.samples; collectionNotes = found.notes; indexedDocuments = found.documentCount
+            scanning = false; collection = "All collections"; category = "All sounds"
+            excludedTypes = []; keyFilter = "All keys"
+            status = "\(found.samples.count.formatted()) audio files and \(found.documentCount) information documents indexed. Originals stay in place."
         }
     }
     func preview(_ sample: Sample?) {
@@ -305,10 +336,31 @@ struct ContentView: View {
             HSplitView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("SAMPLE LIBRARY").font(.caption.bold()).foregroundStyle(.secondary)
-                    TextField("Search names and folders", text: $model.query).textFieldStyle(.roundedBorder)
+                    TextField("Search sounds; use -kick or -loops to exclude", text: $model.query).textFieldStyle(.roundedBorder)
                     Picker("Collection", selection: $model.collection) { ForEach(model.collections, id: \.self) { Text($0) } }.labelsHidden()
                     Picker("Sound", selection: $model.category) { ForEach(model.categories, id: \.self) { Text($0) } }.labelsHidden()
+                    HStack {
+                        Menu {
+                            ForEach(soundTypeNames, id: \.self) { type in
+                                Toggle(type, isOn: Binding(get: { model.excludedTypes.contains(type) }, set: { value in
+                                    if value { model.excludedTypes.insert(type) } else { model.excludedTypes.remove(type) }
+                                }))
+                            }
+                            Divider()
+                            Button("Clear exclusions") { model.excludedTypes = [] }
+                        } label: { Text(model.excludedTypes.isEmpty ? "Exclude sounds…" : "Exclude sounds (\(model.excludedTypes.count))") }
+                        if model.musicalKeys.count > 1 {
+                            Picker("Musical key", selection: $model.keyFilter) { ForEach(model.musicalKeys, id: \.self) { Text($0) } }.labelsHidden()
+                        }
+                    }
+                    if !model.excludedTypes.isEmpty {
+                        Text("Excluding: " + model.excludedTypes.sorted().joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Toggle("Search collection notes", isOn: $model.searchCollectionNotes)
+                        .font(.caption).disabled(model.indexedDocuments == 0)
+                        .help("Include pack-level information from RTF documents in searches. These are collection notes, not measured properties of each sample.")
                     HStack { Text("\(model.filtered.count.formatted()) sounds").font(.caption); Spacer(); Button("▶ Preview") { model.preview(model.current) }.disabled(model.current == nil) }
+                    ScrollViewReader { scroll in
                     List(selection: $model.selected) {
                         ForEach(model.filtered) { s in
                             VStack(alignment: .leading, spacing: 3) {
@@ -318,7 +370,12 @@ struct ContentView: View {
                             .onDrag { NSItemProvider(object: s.path as NSString) }
                             .contextMenu { Button("Preview") { model.preview(s) }; Button("Assign to selected pad") { model.assign(s) }; Button("Show in Finder") { NSWorkspace.shared.selectFile(s.path, inFileViewerRootedAtPath: "") } }
                         }
-                    }.listStyle(.inset).onChange(of: model.selected) { _ in model.preview(model.current) }
+                    }.listStyle(.inset).onChange(of: model.selected) { selection in
+                        model.preview(model.current)
+                        if let selection { scroll.scrollTo(selection) }
+                    }
+                    .onChange(of: model.collection) { _ in if model.current == nil { model.selected = nil; model.stopPreview() } }
+                    }
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text(model.detailName ?? "SAMPLE DETAILS").font(.caption.bold()).lineLimit(1)
@@ -327,6 +384,19 @@ struct ContentView: View {
                                 .disabled(model.detailPath == nil)
                         }
                         Text(model.sampleDetails).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        if let sample = model.inspected, let key = sample.musicalKey {
+                            Text("Filename key: " + key).font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let reference = model.referenceDetails {
+                            Text("Reference: " + reference).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                        if let notes = model.inspectedNotes, !notes.documents.isEmpty {
+                            Menu("Collection Info…") {
+                                ForEach(notes.documents, id: \.path) { document in
+                                    Button(document.lastPathComponent) { NSWorkspace.shared.open(document) }
+                                }
+                            }.help(notes.namingKeys.sorted { $0.key < $1.key }.map { "\($0.key) = \($0.value)" }.joined(separator: "\n"))
+                        }
                         if let path = model.detailPath {
                             Text(path).font(.caption2.monospaced()).foregroundStyle(.secondary)
                                 .lineLimit(2).textSelection(.enabled).help(path)
@@ -340,7 +410,7 @@ struct ContentView: View {
                         Button("New", action: model.newKit)
                     }
                     HStack(spacing: 7) {
-                        ForEach(0..<8) { b in Button(String(UnicodeScalar(65+b)!)) { model.bank = b }.buttonStyle(.borderedProminent).tint(model.bank == b ? .orange : .gray.opacity(0.35)) }
+                        ForEach(0..<8) { b in Button(String(UnicodeScalar(65+b)!)) { NSApp.keyWindow?.makeFirstResponder(nil); model.bank = b }.buttonStyle(.borderedProminent).tint(model.bank == b ? .orange : .gray.opacity(0.35)) }
                         Spacer()
                         Button("Clear Bank \(String(UnicodeScalar(65 + model.bank)!))", action: model.clearBank)
                             .disabled(!model.kit.pads[(model.bank * 16)..<(model.bank * 16 + 16)].contains { $0 != nil })
@@ -351,7 +421,7 @@ struct ContentView: View {
                         ForEach([12,13,14,15,8,9,10,11,4,5,6,7,0,1,2,3], id: \.self) { n in
                             let idx = model.bank * 16 + n
                             let s = model.kit.pads[idx]
-                            Button { model.pad = n; model.preview(s) } label: {
+                            Button { NSApp.keyWindow?.makeFirstResponder(nil); model.pad = n; model.preview(s) } label: {
                                 VStack(alignment: .leading, spacing: 9) {
                                     HStack { Text(String(format: "%@%02d", String(UnicodeScalar(65+model.bank)!), n+1)).font(.caption.monospaced().bold()); Spacer(); if s != nil { Image(systemName: "waveform") } }
                                     Text(s?.name ?? "Empty pad").font(.system(size: 12, weight: .medium)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
@@ -372,12 +442,12 @@ struct ContentView: View {
                         }
                     }
                     HStack {
-                        Button("Assign Selected Sound") { model.assign(model.current) }.disabled(model.current == nil)
-                        Button("Clear Pad") { model.kit.pads[model.index] = nil; model.dirty = true }
+                        Button("Assign Selected Sound (Space)") { NSApp.keyWindow?.makeFirstResponder(nil); model.assign(model.current) }.disabled(model.current == nil)
+                        Button("Clear Pad (C)") { NSApp.keyWindow?.makeFirstResponder(nil); model.clearSelectedPad() }
                         Spacer()
-                        Button("Auto-fill Empty Pads", action: model.autoFill).tint(.orange)
+                        Button("Auto-fill Empty Pads") { NSApp.keyWindow?.makeFirstResponder(nil); model.autoFill() }.tint(.orange)
                     }
-                    Text("Auto-fill fills this bank using your filters. Preferred sound types go first, then other unused sounds. Existing pads stay unchanged.").font(.caption).foregroundStyle(.secondary)
+                    Text("W/S: samples · D: play · A: stop · Arrows: pads · 1–8: banks · Space: assign · C: clear. Shortcuts pause while typing. Auto-fill respects your filters and exclusions.").font(.caption).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Label("MPC export writes a native project using your device-saved template. Hardware validation is pending; test a separate project first.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
                 }.padding(22).frame(minWidth: 570)
@@ -385,6 +455,7 @@ struct ContentView: View {
             Divider()
             HStack { if model.scanning { ProgressView().controlSize(.small) }; Text(model.status).font(.caption).lineLimit(2); Spacer(); Text(BuildInfo.footer).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled); Button("Stop Preview", action: model.stopPreview) }.padding(12)
         }.frame(minWidth: 1000, minHeight: 800).preferredColorScheme(.dark)
+        .background(PadKeyboardShortcuts { model.shortcut($0) })
         .onAppear {
             NSApplication.shared.setActivationPolicy(.regular)
             NSApplication.shared.activate(ignoringOtherApps: true)
@@ -396,6 +467,13 @@ struct ContentView: View {
 }
 @main struct MarsPadApp: App {
     init() {
+        if let index = CommandLine.arguments.firstIndex(of: "--scan-library"), CommandLine.arguments.count == index + 2 {
+            let library = LibraryIndex.scan(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+            print("Indexed \(library.samples.count) audio files, \(library.documentCount) information documents, \(library.notes.values.reduce(0) { $0 + $1.references.count }) filename reference entries")
+            let accents = library.samples.filter { library.notes[$0.collection]?.details(for: $0).contains("Accent:") == true }.count
+            print("Samples with documented accent metadata: \(accents)")
+            exit(0)
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--roundtrip-native"), CommandLine.arguments.count == index + 3 {
             do {
                 let template = try NativeTemplate.read(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
@@ -453,6 +531,7 @@ struct ContentView: View {
             exit(0)
         }
         if CommandLine.arguments.contains("--self-test") {
+            try! runFeatureChecks()
             precondition(classify("808/WAV/01_Kick/kick_001.wav") == "Kick")
             precondition(classify("606/Open Hats/OH_02.wav") == "Open Hat")
             precondition(classify("808 Loops From Mars/BD_loop.wav") == "Loops")

@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.2.4 prototype
+## Current release: 0.3.0 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -25,6 +25,62 @@ A16 → B01 and H16. This supports the tested workflow on that unit, rather than
 establishing compatibility for every project or firmware version.
 Audio-only export remains available for manual assignment. The app writes new
 folders, never firmware or device system files.
+
+## Keyboard controls
+
+Click the sample list or a pad to use these keys. Shortcuts are inactive while
+editing text or using a file dialog; normal typing, text-cursor arrows, and
+Command-key shortcuts are preserved.
+
+| Key | Action |
+| --- | --- |
+| W / S | Previous / next sample in the filtered library (auditions on selection) |
+| D | Play the selected library sound, even if it is not assigned to a pad |
+| A | Stop playback |
+| Arrow keys | Move through the selected bank's 4 × 4 pad grid |
+| 1–8 | Select banks A–H, keeping the same pad position |
+| Space | Assign the selected library sound to the selected pad |
+| C | Clear the selected pad |
+
+Pad movement stops at the grid edges. Up moves toward pads 13–16; Down moves
+toward pads 1–4. W/S keeps the library selection visible as you browse.
+
+## Inclusion and exclusion filters
+
+Choose a collection and sound type as before. Use **Exclude sounds…** to remove
+one or more types—for example, **Kick** and **Loops**—while leaving All sounds
+selected. Exclusions apply to browsing and auto-fill, and never change pads you
+have already assigned. A kick loop matches both Kick and Loops, so either
+exclusion removes it. Clear exclusions through the same menu.
+
+Search supports negative terms and quoted phrases:
+
+- `-kick -loops`: omit kicks and loops.
+- `808 -loops`: find matching 808 sounds while omitting loops.
+- `"No Accent"`: find samples whose documented accent code means No Accent.
+
+These filters work together. A Musical key menu appears when filenames contain
+explicit major/minor keys, such as `F#m` or `Dmaj`; this is filename metadata,
+not audio key detection. Existing saved kit plans remain readable.
+
+## Samples from Mars information files
+
+Scanning also reads local RTF information/reference documents (up to 2 MB each),
+skipping installation and coupon documents. Source files remain unchanged and
+no pack documentation is bundled with the app or repository.
+
+- Reference entries are matched by exact sample filename; matching chord
+  progression text becomes searchable and appears in the sample details.
+- When a collection documents all three A/B/C accent codes, those meanings are
+  expanded for the filename's second-token accent code. The original code and
+  sample name remain unchanged. Ambiguous or undocumented codes are not guessed.
+- **Search collection notes** optionally includes general pack descriptions in
+  searches. These are pack-level matches, not properties asserted for every sound.
+- **Collection Info…** opens the original document of your choice for reference.
+
+For best coverage, select the extracted library root or an entire pack (including
+its Docs folder), rather than only its WAV subfolder. Rescan with Choose Library
+if the documents or extracted samples change.
 
 ## Getting started in pictures
 
@@ -127,6 +183,8 @@ packaging, signing and notarization. Run `swift test` for model checks.
 If XCTest is unavailable in Command Line Tools, run `swift run MarsPad --self-test`
 for the built-in model checks. `swift run MarsPad --preview-self-test` exercises
 rapid switching with generated silent audio, including a three-minute file.
+The model checks also cover keyboard mappings, text-entry guards, grid boundaries,
+legacy kit plans, exclusions and synthetic RTF reference/legend parsing.
 Only the development Mac architecture is built by default. Windows/Linux are
 future work; the SwiftUI interface would need replacement or a separate frontend.
 
@@ -136,7 +194,9 @@ Auto-fill first places preferred categories, then fills remaining empty pads wit
 unused sounds matching the current filters. It keeps occupied pads and avoids
 reusing files assigned anywhere in the kit. If too few eligible sounds remain,
 the status explains why some pads are empty. Category
-inference is based on folder/name tokens; ambiguous names appear under Other.
+inference favors filename tokens and nearby sound folders; ambiguous names appear
+under Other. Explicit filename sound types are not overridden by unrelated
+ancestor-folder names.
 Clear a pad using its context menu. Clear Bank A–H removes every assignment in
 the selected bank while keeping the other banks unchanged. Save Kit before quitting; there is no autosave.
 Saved kits are machine-local plans; moving sample folders breaks their references.
