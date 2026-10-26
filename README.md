@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.3.0 prototype
+## Current release: 0.3.1 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -36,14 +36,34 @@ Command-key shortcuts are preserved.
 | --- | --- |
 | W / S | Previous / next sample in the filtered library (auditions on selection) |
 | D | Play the selected library sound, even if it is not assigned to a pad |
+| F | Play the sound assigned to the selected pad |
 | A | Stop playback |
 | Arrow keys | Move through the selected bank's 4 × 4 pad grid |
 | 1–8 | Select banks A–H, keeping the same pad position |
 | Space | Assign the selected library sound to the selected pad |
 | C | Clear the selected pad |
+| ⌘Z | Undo the last kit edit |
+| ⌘⇧Z | Redo the last undone kit edit |
 
 Pad movement stops at the grid edges. Up moves toward pads 13–16; Down moves
 toward pads 1–4. W/S keeps the library selection visible as you browse.
+
+## Undo and redo
+
+Undo/redo covers assignments (including drag-and-drop), clearing a pad, Clear Bank,
+auto-fill, and kit renaming. Each Clear Bank or auto-fill operation is one action;
+renaming while editing the name field is grouped into one kit edit. Undo/redo
+returns to the edited bank and pad. The undo/redo buttons beside the kit name show
+the action they will reverse in their tooltips.
+
+History retains the latest 100 edits for the open kit. A new edit after undo drops
+the redo branch; no-op actions do not add history. Saving keeps history and tracks
+whether the restored state differs from the last save. New/Open Kit starts a new
+history. History is not stored in `.marspad` files. Navigation, previewing, filtering,
+exports and filesystem operations are not kit edits and are not undone.
+
+While typing in a text field, standard text undo/redo takes precedence. Click the
+sample list or a pad to return to kit shortcuts. Enter has no pad-play binding.
 
 ## Inclusion and exclusion filters
 

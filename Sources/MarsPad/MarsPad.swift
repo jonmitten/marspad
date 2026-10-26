@@ -13,17 +13,78 @@ struct Sample: Identifiable, Codable, Hashable {
     var id: String { path }
     var name: String { URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent }
 }
-struct Kit: Codable {
+struct Kit: Codable, Equatable {
     var version = 1
     var name = "Untitled Kit"
     var pads: [Sample?] = Array(repeating: nil, count: 128)
 }
+struct KitEdit {
+    let name: String
+    let before: Kit
+    var after: Kit
+    let bank: Int
+    let pad: Int
+    let group: UUID?
+}
+
 @MainActor final class Library: ObservableObject {
     @Published var samples: [Sample] = [] { didSet { cachedFiltered = nil; cachedCollections = nil; cachedKeys = nil } }
     private var cachedFiltered: [Sample]?
     private var cachedCollections: [String]?
     private var cachedKeys: [String]?
     @Published var kit = Kit()
+    @Published private(set) var undoEdits: [KitEdit] = []
+    @Published private(set) var redoEdits: [KitEdit] = []
+    private var savedKit = Kit()
+    private var renameGroup: UUID?
+    var canUndo: Bool { !undoEdits.isEmpty }
+    var canRedo: Bool { !redoEdits.isEmpty }
+    var undoTitle: String { undoEdits.last.map { "Undo " + $0.name } ?? "Undo" }
+    var redoTitle: String { redoEdits.last.map { "Redo " + $0.name } ?? "Redo" }
+    func commitEdit(_ next: Kit, name: String, target: Int? = nil, group: UUID? = nil) {
+        guard next != kit else { return }
+        let before = kit
+        if let group, var last = undoEdits.last, last.group == group {
+            if last.before == next { undoEdits.removeLast() }
+            else { last.after = next; undoEdits[undoEdits.count - 1] = last }
+        } else {
+            undoEdits.append(KitEdit(name: name, before: before, after: next,
+                                     bank: target.map { $0 / 16 } ?? bank,
+                                     pad: target.map { $0 % 16 } ?? pad, group: group))
+            if undoEdits.count > 100 { undoEdits.removeFirst() }
+        }
+        redoEdits = []
+        kit = next
+        dirty = kit != savedKit
+    }
+    func undoKitEdit() {
+        guard let edit = undoEdits.popLast() else { return }
+        renameGroup = nil
+        stopPreview()
+        kit = edit.before; bank = edit.bank; pad = edit.pad
+        redoEdits.append(edit)
+        dirty = kit != savedKit
+        status = "Undid " + edit.name + "."
+    }
+    func redoKitEdit() {
+        guard let edit = redoEdits.popLast() else { return }
+        renameGroup = nil
+        stopPreview()
+        kit = edit.after; bank = edit.bank; pad = edit.pad
+        undoEdits.append(edit)
+        dirty = kit != savedKit
+        status = "Redid " + edit.name + "."
+    }
+    func setNameEditing(_ editing: Bool) { renameGroup = editing ? UUID() : nil }
+    func renameKit(_ name: String) {
+        var next = kit; next.name = name
+        commitEdit(next, name: "Rename Kit", group: renameGroup)
+    }
+    func markSaved() { savedKit = kit; dirty = false }
+    func replaceKit(_ next: Kit) {
+        stopPreview(); kit = next; savedKit = next; dirty = false
+        undoEdits = []; redoEdits = []; renameGroup = nil
+    }
     @Published var query = "" { didSet { cachedFiltered = nil } }
     @Published var collection = "All collections" { didSet { cachedFiltered = nil } }
     @Published var category = "All sounds" { didSet { cachedFiltered = nil } }
@@ -86,16 +147,24 @@ struct Kit: Codable {
         let details = notes.details(for: sample)
         return details.isEmpty ? nil : details
     }
-    func clearSelectedPad() {
-        guard kit.pads[index] != nil else { return }
-        kit.pads[index] = nil; dirty = true
-        status = "Cleared pad \(String(UnicodeScalar(65 + bank)!))\(String(format: "%02d", pad + 1))."
+    func clearPad(at target: Int) {
+        guard kit.pads.indices.contains(target), kit.pads[target] != nil else { return }
+        var next = kit; next.pads[target] = nil
+        let label = String(format: "%@%02d", String(UnicodeScalar(65 + target / 16)!), target % 16 + 1)
+        commitEdit(next, name: "Clear " + label, target: target)
+        status = "Cleared pad " + label + "."
     }
+    func clearSelectedPad() { clearPad(at: index) }
     func shortcut(_ action: PadShortcut) {
         switch action {
+        case .undo: undoKitEdit()
+        case .redo: redoKitEdit()
         case .assign: assign(current)
         case .clear: clearSelectedPad()
         case .preview: preview(current)
+        case .previewPad:
+            if let sample = kit.pads[index] { preview(sample) }
+            else { stopPreview(); status = "Selected pad is empty." }
         case .stop: stopPreview(); status = "Preview stopped."
         case .bank(let target): bank = min(7, max(0, target))
         case .pad(let horizontal, let vertical):
@@ -187,39 +256,45 @@ struct Kit: Codable {
     }
     func assign(_ sample: Sample?, at target: Int? = nil) {
         guard let sample else { return }
-        kit.pads[target ?? index] = sample; dirty = true
+        let target = target ?? index
+        guard kit.pads.indices.contains(target) else { return }
+        var next = kit; next.pads[target] = sample
+        let label = String(format: "%@%02d", String(UnicodeScalar(65 + target / 16)!), target % 16 + 1)
+        commitEdit(next, name: "Assign " + label, target: target)
     }
     func clearBank() {
         let range = (bank * 16)..<(bank * 16 + 16)
         let count = kit.pads[range].compactMap { $0 }.count
         guard count > 0 else { return }
-        for index in range { kit.pads[index] = nil }
+        var next = kit
+        for index in range { next.pads[index] = nil }
+        commitEdit(next, name: "Clear Bank " + String(UnicodeScalar(65 + bank)!))
         stopPreview()
-        dirty = true
         status = "Cleared \(count) pads in bank \(String(UnicodeScalar(65 + bank)!)). Other banks unchanged."
     }
     func autoFill() {
         let available = filtered
-        var used = Set(kit.pads.compactMap { $0?.path })
+        var next = kit
+        var used = Set(next.pads.compactMap { $0?.path })
         let layout = ["Kick", "Kick", "Snare", "Clap", "Closed Hat", "Closed Hat", "Open Hat", "Percussion", "Tom", "Tom", "Cymbal", "Percussion", "Bass", "Other", "Loops", "Other"]
         var filled = 0
-        for n in 0..<16 where kit.pads[bank * 16 + n] == nil {
+        for n in 0..<16 where next.pads[bank * 16 + n] == nil {
             if let s = available.first(where: { $0.category == layout[n] && !used.contains($0.path) }) {
-                kit.pads[bank * 16 + n] = s; used.insert(s.path); filled += 1
+                next.pads[bank * 16 + n] = s; used.insert(s.path); filled += 1
             }
         }
         // Reserve category matches first, then use other filtered sounds for remaining pads.
         var remaining = available.filter { !used.contains($0.path) }.makeIterator()
-        for n in 0..<16 where kit.pads[bank * 16 + n] == nil {
+        for n in 0..<16 where next.pads[bank * 16 + n] == nil {
             while let candidate = remaining.next() {
                 guard used.insert(candidate.path).inserted else { continue }
-                kit.pads[bank * 16 + n] = candidate
+                next.pads[bank * 16 + n] = candidate
                 filled += 1
                 break
             }
         }
-        dirty = dirty || filled > 0
-        let empty = kit.pads[(bank * 16)..<(bank * 16 + 16)].filter { $0 == nil }.count
+        if filled > 0 { commitEdit(next, name: "Auto-fill Bank " + String(UnicodeScalar(65 + bank)!)) }
+        let empty = next.pads[(bank * 16)..<(bank * 16 + 16)].filter { $0 == nil }.count
         status = "Filled \(filled) empty pads in bank \(String(UnicodeScalar(65 + bank)!)). Existing assignments kept."
         if empty > 0 {
             status += " \(empty) still empty: no more unused sounds match your filters. Broaden filters or choose another collection."
@@ -230,11 +305,11 @@ struct Kit: Codable {
         let a = NSAlert(); a.messageText = "Discard unsaved kit changes?"; a.addButton(withTitle: "Cancel"); a.addButton(withTitle: "Discard")
         return a.runModal() == .alertSecondButtonReturn
     }
-    func newKit() { if confirmDiscard() { kit = Kit(); dirty = false } }
+    func newKit() { if confirmDiscard() { replaceKit(Kit()) } }
     func save() {
         let p = NSSavePanel(); p.nameFieldStringValue = kit.name + ".marspad"
         if p.runModal() == .OK, let url = p.url {
-            do { let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; try encoder.encode(kit).write(to: url, options: .atomic); dirty = false; status = "Kit saved: \(url.lastPathComponent)" }
+            do { let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; try encoder.encode(kit).write(to: url, options: .atomic); markSaved(); status = "Kit saved: \(url.lastPathComponent)" }
             catch { status = "Save failed: \(error.localizedDescription)" }
         }
     }
@@ -245,7 +320,7 @@ struct Kit: Codable {
             do {
                 let loaded = try JSONDecoder().decode(Kit.self, from: Data(contentsOf: url))
                 guard loaded.version == 1, loaded.pads.count == 128 else { throw CocoaError(.fileReadCorruptFile) }
-                kit = loaded; dirty = false
+                replaceKit(loaded)
                 let missing = kit.pads.compactMap { $0 }.filter { !FileManager.default.fileExists(atPath: $0.path) }.count
                 status = missing == 0 ? "Kit opened." : "Kit opened; \(missing) assigned files are missing."
             } catch { status = "Open failed: \(error.localizedDescription)" }
@@ -405,8 +480,12 @@ struct ContentView: View {
                 }.padding(18).frame(minWidth: 300, idealWidth: 370)
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
-                        TextField("Kit name", text: $model.kit.name).font(.title2.bold()).onChange(of: model.kit.name) { _ in model.dirty = true }
+                        TextField("Kit name", text: Binding(get: { model.kit.name }, set: { model.renameKit($0) }), onEditingChanged: model.setNameEditing).font(.title2.bold())
                         if model.dirty { Text("Unsaved").font(.caption).foregroundStyle(.orange) }
+                        Button { NSApp.keyWindow?.makeFirstResponder(nil); model.undoKitEdit() } label: { Image(systemName: "arrow.uturn.backward") }
+                            .disabled(!model.canUndo).help(model.undoTitle).accessibilityLabel(model.undoTitle)
+                        Button { NSApp.keyWindow?.makeFirstResponder(nil); model.redoKitEdit() } label: { Image(systemName: "arrow.uturn.forward") }
+                            .disabled(!model.canRedo).help(model.redoTitle).accessibilityLabel(model.redoTitle)
                         Button("New", action: model.newKit)
                     }
                     HStack(spacing: 7) {
@@ -438,7 +517,7 @@ struct ContentView: View {
                                     Task { @MainActor in if let s = model.samples.first(where: { $0.path == path }) { model.assign(s, at: idx) } }
                                 }; return true
                             }
-                            .contextMenu { Button("Clear pad") { model.kit.pads[idx] = nil; model.dirty = true }; if let s { Button("Show in Finder") { NSWorkspace.shared.selectFile(s.path, inFileViewerRootedAtPath: "") } } }
+                            .contextMenu { Button("Clear pad") { model.clearPad(at: idx) }; if let s { Button("Show in Finder") { NSWorkspace.shared.selectFile(s.path, inFileViewerRootedAtPath: "") } } }
                         }
                     }
                     HStack {
@@ -447,7 +526,7 @@ struct ContentView: View {
                         Spacer()
                         Button("Auto-fill Empty Pads") { NSApp.keyWindow?.makeFirstResponder(nil); model.autoFill() }.tint(.orange)
                     }
-                    Text("W/S: samples · D: play · A: stop · Arrows: pads · 1–8: banks · Space: assign · C: clear. Shortcuts pause while typing. Auto-fill respects your filters and exclusions.").font(.caption).foregroundStyle(.secondary)
+                    Text("W/S: samples · D: sample · F: pad · A: stop · Arrows: pads · 1–8: banks · Space: assign · C: clear · ⌘Z: undo · ⌘⇧Z: redo. Shortcuts pause while typing. Auto-fill respects your filters and exclusions.").font(.caption).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Label("MPC export writes a native project using your device-saved template. Hardware validation is pending; test a separate project first.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
                 }.padding(22).frame(minWidth: 570)

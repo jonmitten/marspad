@@ -2,10 +2,14 @@ import SwiftUI
 import AppKit
 
 enum PadShortcut: Equatable {
-    case assign, clear, preview, stop
+    case assign, clear, preview, previewPad, stop, undo, redo
     case sample(Int), pad(Int, Int), bank(Int)
     static func action(characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags, editing: Bool) -> PadShortcut? {
-        guard !editing, modifiers.intersection([.command, .control, .option]).isEmpty else { return nil }
+        guard !editing else { return nil }
+        if characters.lowercased() == "z", modifiers.contains(.command), modifiers.intersection([.control, .option]).isEmpty {
+            return modifiers.contains(.shift) ? .redo : .undo
+        }
+        guard modifiers.intersection([.command, .control, .option]).isEmpty else { return nil }
         if !modifiers.contains(.shift) {
             switch keyCode {
             case 123: return .pad(-1, 0)
@@ -21,6 +25,7 @@ enum PadShortcut: Equatable {
         case "w": return .sample(-1)
         case "s": return .sample(1)
         case "d": return .preview
+        case "f": return .previewPad
         case "a": return .stop
         case "c": return .clear
         case " ": return .assign

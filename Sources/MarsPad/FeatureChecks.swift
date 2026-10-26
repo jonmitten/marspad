@@ -47,6 +47,60 @@ import AppKit
     precondition(PadShortcut.action(characters: " ", keyCode: 49, modifiers: [], editing: true) == nil)
     precondition(PadShortcut.action(characters: "s", keyCode: 1, modifiers: [], editing: true) == nil)
 
+    precondition(PadShortcut.action(characters: "f", keyCode: 3, modifiers: [], editing: false) == .previewPad)
+    precondition(PadShortcut.action(characters: "\r", keyCode: 36, modifiers: [], editing: false) == nil)
+    precondition(PadShortcut.action(characters: "z", keyCode: 6, modifiers: [.command], editing: false) == .undo)
+    precondition(PadShortcut.action(characters: "Z", keyCode: 6, modifiers: [.command, .shift], editing: false) == .redo)
+    precondition(PadShortcut.action(characters: "z", keyCode: 6, modifiers: [.command], editing: true) == nil)
+
+    let history = Library()
+    history.samples = [kick, loop, hat]
+    history.selected = loop.id
+    history.assign(kick)
+    precondition(history.canUndo && history.dirty)
+    history.shortcut(.previewPad)
+    precondition(history.detailPath == kick.path) // Plays the pad, not library selection.
+    history.stopPreview()
+    history.markSaved()
+    history.clearSelectedPad()
+    precondition(history.kit.pads[0] == nil && history.dirty)
+    history.undoKitEdit()
+    precondition(history.kit.pads[0] == kick && !history.dirty && history.canRedo)
+    history.redoKitEdit()
+    precondition(history.kit.pads[0] == nil && history.dirty)
+    history.undoKitEdit()
+    history.assign(hat, at: 127)
+    precondition(!history.canRedo && history.kit.pads[127] == hat)
+    history.bank = 0
+    history.clearBank()
+    history.undoKitEdit()
+    precondition(history.kit.pads[0] == kick && history.kit.pads[127] == hat)
+    history.redoKitEdit()
+    precondition(history.kit.pads[0] == nil && history.kit.pads[127] == hat)
+    history.replaceKit(Kit())
+    history.bank = 7
+    history.autoFill()
+    let filled = history.kit
+    precondition(history.undoEdits.count == 1 && filled.pads.suffix(16).compactMap { $0 }.count == 3)
+    history.bank = 0
+    history.undoKitEdit()
+    precondition(history.kit == Kit() && history.bank == 7)
+    history.redoKitEdit(); precondition(history.kit == filled)
+    history.setNameEditing(true)
+    history.renameKit("T"); history.renameKit("Test Kit")
+    history.setNameEditing(false)
+    precondition(history.undoEdits.count == 2)
+    history.undoKitEdit(); precondition(history.kit.name == "Untitled Kit")
+    history.redoKitEdit(); precondition(history.kit.name == "Test Kit")
+    let beforeNoop = history.undoEdits.count
+    let occupied = history.kit.pads.firstIndex(where: { $0 != nil })!
+    history.assign(history.kit.pads[occupied], at: occupied)
+    precondition(history.undoEdits.count == beforeNoop)
+    history.replaceKit(Kit()); precondition(!history.canUndo && !history.canRedo && !history.dirty)
+    for i in 0..<105 { history.renameKit("Kit \(i)") }
+    precondition(history.undoEdits.count == 100)
+    print("PASS: undo/redo assign, clear, bulk bank edits, rename coalescing, save baseline, redo branching, history limit, context restoration and distinct pad playback")
+
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let pack = root.appendingPathComponent("Pack")
