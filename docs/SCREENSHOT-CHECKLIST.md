@@ -14,7 +14,7 @@ and readable sample names throughout so readers can follow one complete workflow
 | 4 | Multiple banks | The same demonstration kit in banks A and B (two shots), showing different assignments and the selected bank. |
 | 5 | Clear Bank | Before/after shots of clearing one bank while another remains populated. Use a disposable demonstration kit. |
 | 6 | Save and reopen | Save Kit dialog with a friendly kit name and .marspad extension; then the reopened kit with assignments restored. |
-| 7 | Native export template | Export MPC's first-use template chooser with a device-saved .xpj or project ZIP selected. This is a template, not the kit plan. |
+| 7 | Optional custom template | Right-click Export MPC to show the built-in blank project and optional custom-template choices. |
 | 8 | Exported project files | Finder showing the kit-named .xpj beside its matching _[ProjectData] folder. Expand the audio folder to show preserved sample names in pad-prefixed WAV filenames. |
 | 9 | SD-card placement | Finder showing the .xpj and matching audio folder directly inside MPC-Sample/Projects. Keep this distinct from the outer local export folder. |
 | 10 | MPC Sample result | A photo of the exported kit loaded on the hardware, matching the pad names/positions shown in MarsPad. |

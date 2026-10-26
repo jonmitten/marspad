@@ -39,6 +39,12 @@ struct NativeTemplate {
         return result
     }
 
+    static func builtInURL() throws -> URL {
+        if let url = Bundle.main.url(forResource: "BlankProject", withExtension: "json.gz") { return url }
+        if let url = Bundle.module.url(forResource: "BlankProject", withExtension: "json.gz") { return url }
+        throw ExportFailure("Built-in blank project is missing. Rebuild or reinstall MarsPad.")
+    }
+
     static func read(_ url: URL, requireEmptyPad: Bool = true) throws -> NativeTemplate {
         var packed: Data
         if url.pathExtension.lowercased() == "zip" {
@@ -175,12 +181,13 @@ enum NativeExport {
         return frames
     }
 
-    static func export(kit: Kit, templateURL: URL, parent: URL,
+    static func export(kit: Kit, templateURL: URL? = nil, parent: URL,
                        progress: @escaping (String) -> Void = { _ in }) throws -> URL {
         guard kit.version == 1, kit.pads.count == 128, kit.pads.contains(where: { $0 != nil }) else {
             throw ExportFailure("Assign at least one sample to a valid 128-pad kit.")
         }
         progress("Reading native project template…")
+        let templateURL = try templateURL ?? NativeTemplate.builtInURL()
         let template = try NativeTemplate.read(templateURL)
         var data = cleaned(template.root["data"]!) as! [String: Any]
         var tracks = data["tracks"] as! [[String: Any]]

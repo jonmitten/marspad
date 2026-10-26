@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Integration checks against a caller-supplied native reference; no proprietary fixture is bundled."""
+"""Integration checks against a built-in blank project or an optional caller-supplied reference."""
 import argparse
 import gzip
 import hashlib
@@ -17,9 +17,16 @@ import zipfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('binary', type=Path)
-    parser.add_argument('template', type=Path)
+    parser.add_argument('template', type=Path, nargs='?')
     args = parser.parse_args()
-    binary, template = args.binary.resolve(), args.template.resolve()
+    binary = args.binary.resolve()
+    template = args.template.resolve() if args.template else Path(__file__).resolve().parents[1] / 'Sources/MarsPad/Resources/BlankProject.json.gz'
+    reference_argument = str(template) if args.template else 'builtin'
+    if zipfile.is_zipfile(template):
+        with zipfile.ZipFile(template) as archive:
+            packed = archive.read(next(n for n in archive.namelist() if n.endswith('.xpj')))
+    else:
+        packed = template.read_bytes()
     original_hash = hashlib.sha256(template.read_bytes()).digest()
     with tempfile.TemporaryDirectory(prefix='marspad-export-test-') as temp:
         root = Path(temp)
@@ -28,11 +35,27 @@ def main():
         # A no-change archive must preserve serialization order and scalar tokens.
         # Ordinary JSON equality would miss the sorted-key rewrite in older builds.
         roundtrip = root / 'roundtrip-native.txt'
-        result = subprocess.run([str(binary), '--roundtrip-native', str(template), str(roundtrip)], capture_output=True, text=True, timeout=60)
+        result = subprocess.run([str(binary), '--roundtrip-native', reference_argument, str(roundtrip)], capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stderr
-        with zipfile.ZipFile(template) as archive:
-            member = next(n for n in archive.namelist() if n.endswith('.xpj'))
-            native = gzip.decompress(archive.read(member))
+        native = gzip.decompress(packed)
+        if not args.template:
+            blank = json.loads(native[native.index(b'{'):])['data']
+            drums = [t for t in blank['tracks'] if t['program']['type'] == 0]
+            instruments = drums[0]['program']['drum']['instruments']
+            assert len(drums) == 1 and len(instruments) == 128
+            assert all(len(i['layersv']) == 8 for i in instruments)
+            def audit(value):
+                if isinstance(value, dict):
+                    for key, item in value.items():
+                        if key in ['samples', 'events', 'items', 'effects', 'sampleFile', 'sampleName']:
+                            assert not item, f'Bundled project contains content: {key}'
+                        audit(item)
+                elif isinstance(value, list):
+                    for item in value: audit(item)
+                elif isinstance(value, str):
+                    assert '/Users/' not in value and '/Volumes/' not in value
+                    assert not value.lower().endswith(('.wav', '.aif', '.aiff', '.mp3'))
+            audit(blank)
         def tokens(raw):
             return re.findall(rb'"(?:\\.|[^"\\])*"|[^\s"{},:\[\]]+|[{},:\[\]]', raw)
         assert tokens(native) == tokens(roundtrip.read_bytes()), 'Native field order/scalar spellings changed'
@@ -48,7 +71,7 @@ def main():
             pads.append({'path': str(path), 'collection': 'Synthetic', 'category': 'Other'})
         source_hashes = {p: hashlib.sha256(p.read_bytes()).digest() for p in source.iterdir()}
 
-        def export(values, reference=template, ok=True, kit_name='Integration Test'):
+        def export(values, reference=reference_argument, ok=True, kit_name='Integration Test'):
             plan = root / 'test.marspad'
             plan.write_text(json.dumps({'version': 1, 'name': kit_name, 'pads': values}))
             before = set(output.iterdir())
@@ -152,10 +175,8 @@ def main():
         for i in [0, 15, 16, 63, 127]: sparse[i] = pads[i]
         export(sparse)
         # Raw XPJ templates work as well as archives.
-        with zipfile.ZipFile(template) as archive:
-            name = next(n for n in archive.namelist() if n.endswith('.xpj'))
-            raw_reference = root / 'reference.xpj'
-            raw_reference.write_bytes(archive.read(name))
+        raw_reference = root / 'reference.xpj'
+        raw_reference.write_bytes(packed)
         export(sparse, raw_reference)
         missing = sparse.copy(); missing[1] = dict(pads[1], path=str(root / 'missing.wav'))
         export(missing, ok=False)

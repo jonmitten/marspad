@@ -3,7 +3,7 @@
 A local macOS sample librarian and pad-bank planner for Akai MPC Sample owners.
 MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 
-## Current release: 0.3.1 prototype
+## Current release: 0.4.0 prototype
 
 - Scan extracted audio collections without modifying source files. ZIPs are skipped.
 - Search by filename or folder, filter collections and inferred sound categories.
@@ -14,7 +14,7 @@ MIT licensed. Unaffiliated with Akai Professional or Samples from Mars.
 - Auto-fill empty pads in the current bank using the current library filters.
 - Save/open editable `.marspad` kit plans. These reference original absolute paths.
 - Export unchanged sample copies and a CSV pad map into a fresh output folder.
-- Export a native `.xpj` plus companion audio directory using a device-saved template.
+- Export a native `.xpj` plus companion audio directory using a built-in blank project; no device template is required.
 
 Native export is experimental. **A previous generated project failed to load on
 the hardware.** Version 0.2.4 preserves native serialization order and scalar
@@ -148,7 +148,7 @@ kit throughout; these captures are optional follow-up work.
 - [ ] **Bank switching:** capture the same kit in banks A and B with different assignments.
 - [ ] **Clear Bank:** capture before and after clearing one bank.
 - [ ] **Save/Open Kit:** show saving a `.marspad` file and reopening it with assignments restored.
-- [ ] **Export template selection:** show selecting a project saved by the MPC Sample.
+- [ ] **Optional custom template:** show the Export MPC context menu and custom project chooser.
 - [ ] **Exported files:** show the kit-named `.xpj` beside its matching audio folder.
 - [ ] **SD placement:** show both items directly inside `MPC-Sample/Projects`.
 - [ ] **Hardware result:** photograph the matching assignments on the MPC Sample.
@@ -158,10 +158,9 @@ See the [screenshot capture checklist](docs/SCREENSHOT-CHECKLIST.md) for more de
 ## Export to MPC Sample
 
 1. Save your kit plan, then choose **Export MPC…**.
-2. On first export, select a project saved by your MPC Sample: an `.xpj` or a ZIP
-   containing one. A template with at least one empty pad is required. This
-   release accepts only AC50 / engine Sample / schema 28 / preamble 1.3.0.12.
-   The supplied template stays unchanged and is not bundled in the source code.
+2. A blank MPC Sample project is built in. No preparatory export from the device
+   is needed. The supported format is AC50 / engine Sample / schema 28 /
+   preamble 1.3.0.12.
 3. Choose a local destination. For a kit named `My Kit`, the app writes a fresh
    `My Kit` folder with `My Kit.xpj`, `My Kit_[ProjectData]/`, a report, and notes.
    Existing exports remain intact: repeated exports use `My Kit-2`, `My Kit-3`,
@@ -175,9 +174,15 @@ See the [screenshot capture checklist](docs/SCREENSHOT-CHECKLIST.md) for more de
    and verify bank boundaries, full sample playback, and empty pads. This is the
    remaining hardware validation step; software checks cannot establish it.
 
-The template path is remembered. Right-click Export MPC… and choose Change MPC
-Template… to select another reference. Export snapshots the kit so subsequent
-edits do not change an in-progress export.
+Right-click **Export MPC…** to choose **Use Custom MPC Template…** if you want
+settings from your own device-saved `.xpj` or ZIP. Custom templates need at least
+one empty pad and must match the supported schema. The custom path is remembered;
+**Use Built-in Blank Project** switches back to the default. Export snapshots the
+kit so subsequent edits do not change an in-progress export.
+
+The exporter has previously been tested on the user's hardware. The newly bundled
+blank project's first hardware load still needs confirmation; software tests cover
+its structure and all 128 assignments. See [compatibility evidence](COMPATIBILITY.md).
 
 Audio is streamed into 24-bit PCM WAVs, retaining source rate and channels.
 Mono/stereo at 44.1, 48, or 96 kHz and up to 20 minutes per sample are supported;
@@ -226,8 +231,9 @@ Saved kits are machine-local plans; moving sample folders breaks their reference
 `python3 tools/inspect_project.py /path/to/project.zip` performs a read-only archive
 integrity and sample-reference check, printing inferred assignments. It does not
 extract files, execute project content, or generate device projects.
-`python3 tools/test_native_export.py /path/to/MarsPad /path/to/reference.zip`
-checks native exports using generated audio and your read-only reference.
+`python3 tools/test_native_export.py /path/to/MarsPad`
+checks the built-in project using generated audio. Append a read-only reference
+ZIP path to check the optional custom-template workflow.
 It covers all banks, sparse assignments, PCM payloads, sample lengths, missing
 files, invalid templates, unsupported rates, and cleanup. No proprietary fixture
 is committed. See COMPATIBILITY.md for evidence and limits.
@@ -236,7 +242,8 @@ is committed. See COMPATIBILITY.md for evidence and limits.
 
 Commit code and documentation only. Do not commit commercial audio, personal
 MPC projects, exported kits, local library indexes or absolute personal paths.
-No audio or supplied project is bundled with this repository. MIT applies to this
+A generated, content-free blank schema resource is bundled; no commercial audio
+or personal project is included. MIT applies to this
 application's code; it does not relicense any imported sample content.
 
 ## Audio details and build identity

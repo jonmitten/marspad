@@ -99,6 +99,7 @@ struct KitEdit {
     @Published var status = "Choose your sample folder to get started."
     @Published var scanning = false
     @Published var exporting = false
+    @Published var customTemplateEnabled = UserDefaults.standard.bool(forKey: "useCustomNativeTemplate")
     @Published var dirty = false
     @Published var playing: String?
     @Published var sampleDetails = "Select a sample to see its audio details."
@@ -332,15 +333,26 @@ struct KitEdit {
         panel.message = "Choose a project saved by your MPC Sample (.xpj or a ZIP containing one). It is read as a template and stays unchanged."
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         UserDefaults.standard.set(url.path, forKey: "nativeTemplate")
+        customTemplateEnabled = true
+        UserDefaults.standard.set(true, forKey: "useCustomNativeTemplate")
         return url
+    }
+    func useBuiltInTemplate() {
+        customTemplateEnabled = false
+        UserDefaults.standard.set(false, forKey: "useCustomNativeTemplate")
+        status = "MPC export will use the built-in blank project."
     }
     func exportNative() {
         guard !exporting else { return }
         guard kit.pads.contains(where: { $0 != nil }) else { status = "Assign at least one sample before exporting."; return }
-        let remembered = UserDefaults.standard.string(forKey: "nativeTemplate").flatMap {
-            FileManager.default.fileExists(atPath: $0) ? URL(fileURLWithPath: $0) : nil
-        }
-        guard let template = remembered ?? chooseNativeTemplate() else { return }
+        let template: URL?
+        if customTemplateEnabled {
+            guard let path = UserDefaults.standard.string(forKey: "nativeTemplate"), FileManager.default.fileExists(atPath: path) else {
+                status = "Custom template is missing. Right-click Export MPC to use the built-in blank project or choose another template."
+                return
+            }
+            template = URL(fileURLWithPath: path)
+        } else { template = nil }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.canCreateDirectories = true
         panel.message = "Choose an export destination. A new folder will contain the .xpj and companion audio directory. Hardware validation is pending."
@@ -405,7 +417,10 @@ struct ContentView: View {
                 Button("Export Audio…", action: model.exportAudio).disabled(model.exporting)
                 Button(model.exporting ? "Exporting…" : "Export MPC…", action: model.exportNative)
                     .disabled(model.exporting)
-                    .contextMenu { Button("Change MPC Template…") { _ = model.chooseNativeTemplate() } }
+                    .contextMenu {
+                        Button("Use Built-in Blank Project") { model.useBuiltInTemplate() }
+                        Button("Use Custom MPC Template…") { _ = model.chooseNativeTemplate() }
+                    }
             }.padding(22)
             Divider()
             HSplitView {
@@ -528,7 +543,7 @@ struct ContentView: View {
                     }
                     Text("W/S: samples · D: sample · F: pad · A: stop · Arrows: pads · 1–8: banks · Space: assign · C: clear · ⌘Z: undo · ⌘⇧Z: redo. Shortcuts pause while typing. Auto-fill respects your filters and exclusions.").font(.caption).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Label("MPC export writes a native project using your device-saved template. Hardware validation is pending; test a separate project first.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
+                    Label("Export MPC creates a project with your kit name and pad assignments. A blank project is built in; a custom template is optional.", systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
                 }.padding(22).frame(minWidth: 570)
             }
             Divider()
@@ -555,7 +570,8 @@ struct ContentView: View {
         }
         if let index = CommandLine.arguments.firstIndex(of: "--roundtrip-native"), CommandLine.arguments.count == index + 3 {
             do {
-                let template = try NativeTemplate.read(URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+                let templateURL = try CommandLine.arguments[index + 1] == "builtin" ? NativeTemplate.builtInURL() : URL(fileURLWithPath: CommandLine.arguments[index + 1])
+                let template = try NativeTemplate.read(templateURL)
                 let raw = template.header + (try template.layout.encode(template.root))
                 try raw.write(to: URL(fileURLWithPath: CommandLine.arguments[index + 2]))
                 print("Native serialization round-trip written locally.")
@@ -565,7 +581,7 @@ struct ContentView: View {
         if let index = CommandLine.arguments.firstIndex(of: "--export-mpc"), CommandLine.arguments.count == index + 4 {
             do {
                 let kit = try JSONDecoder().decode(Kit.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[index + 1])))
-                let folder = try NativeExport.export(kit: kit, templateURL: URL(fileURLWithPath: CommandLine.arguments[index + 2]),
+                let folder = try NativeExport.export(kit: kit, templateURL: CommandLine.arguments[index + 2] == "builtin" ? nil : URL(fileURLWithPath: CommandLine.arguments[index + 2]),
                                                      parent: URL(fileURLWithPath: CommandLine.arguments[index + 3]))
                 print(folder.path)
                 exit(0)

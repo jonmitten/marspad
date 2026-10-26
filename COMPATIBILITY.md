@@ -13,10 +13,12 @@ Observed in one user-supplied device project (not a general schema guarantee):
 - All 35 WAV files referenced by that project were found in its companion folder.
 - There are 35 occupied instrument layers in the first drum track.
 
-## Exporter behavior (0.2.4)
+## Exporter behavior (0.4.0)
 
-Native export reads a caller-supplied reference at runtime; it does not bundle
-or distribute the user's project. Templates with unknown versions, multiple drum
+Native export defaults to a bundled content-free blank project. A developer utility
+removes audio references, musical events, effects and personal labels from the
+observed schema while retaining its field order and device defaults. No commercial
+audio or personal project is distributed. A custom reference is optional. Templates with unknown versions, multiple drum
 tracks, or no empty-pad prototype are rejected. The template is never modified.
 
 - Every instrument is cloned from the reference's empty-pad settings.
@@ -90,7 +92,8 @@ bank order across A–H and the A16 → B01 and H16 boundary checks. These resul
 support the tested workflow on this unit. Broader verification should still
 check empty pads, levels/envelopes, routing and inherited controller state.
 This evidence does not establish all-project or all-firmware compatibility.
-A blank project saved by the same unit would improve the reference.
+The new built-in blank resource still needs its own hardware load/play/save test.
+Earlier hardware confirmations used the custom-reference workflow.
 
 The guide documents 16 pads × 8 banks, supported audio rates and formats, and SD
 Card Access. It does not define the serialized schema. Structural tests do not
